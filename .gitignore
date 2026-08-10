@@ -1,1 +1,13 @@
 *.safetensors
+
+# Local development and generated inference artifacts
+.DS_Store
+.ruff_cache/
+__pycache__/
+*.py[cod]
+outputs/
+
+# Local Codex planning files
+task_plan.md
+findings.md
+progress.md
