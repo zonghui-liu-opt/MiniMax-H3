@@ -13,8 +13,20 @@ bash infer_smoke_8gpu.sh \
 
 默认 GPU 分组 `0,1,2,3` 和 `4,5,6,7`，每组沿用已跑通的
 `--num-gpus 4 --tp-size 2 --ulysses-degree 2 --performance-mode speed`。
-HTTP 端口为 `30010/30011`，分布式初始化端口 `--master-port` 为 `31010/31011`，
-调度器端口 `--scheduler-port` 为 `32010/32011`。启动前校验所有端口均不重复且未被占用。
+默认端口分配如下：
+
+| GPU | HTTP | ZMQ Broker（自动占用 HTTP+1） | master | scheduler |
+| --- | --- | --- | --- | --- |
+| 0,1,2,3 | 30010 | 30011 | 31010 | 32010 |
+| 4,5,6,7 | 30012 | 30013 | 31011 | 32011 |
+
+`--base-port` 设置第一个 HTTP 端口，后续副本每次加 **2**。
+启动前校验全部八个端口的范围、重复和实际占用，包括隐式的 ZMQ Broker 端口。
+命令、客户端 URL 和日志名使用同一份端口分配。
+
+旧脚本使用 HTTP `30010/30011`，但第一个服务的 ZMQ Broker 会占用 `30011`，
+导致第二个服务在模型加载完成后报 `address already in use`。此次修复为每个副本
+预留 HTTP+1；不要再把第二个 HTTP 端口手动设为 `30011`。
 SGLang Diffusion 的两个副本如果都使用默认 `master_port=30005`，可能在同时启动时
 发生 `EADDRINUSE`；仅分开 HTTP 端口不能隔离分布式初始化。
 本入口不传入 `--nccl-port`。旧参数 `--base-nccl-port` 作为 `--base-master-port` 的兼容别名，
@@ -39,15 +51,16 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 sglang serve \
   --model-path /srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3 \
   --num-gpus 4 --tp-size 2 --ulysses-degree 2 \
   --performance-mode speed --host 127.0.0.1 \
-  --port 30011 --master-port 31011 --scheduler-port 32011 --model-variant fl2va
+  --port 30012 --master-port 31011 --scheduler-port 32011 --model-variant fl2va
 
 # 在另一个终端连接两组服务；该模式不会启动或停止它们
 bash infer_smoke_8gpu.sh \
-  --server-urls http://127.0.0.1:30010 http://127.0.0.1:30011
+  --server-urls http://127.0.0.1:30010 http://127.0.0.1:30012
 ```
 
 两个服务必须使用不同 GPU，不能把同一服务的两个 URL 当作两个副本。
-启动器不会自动接管占用端口的服务；端口冲突会直接报错。
+启动器不会自动接管占用端口的服务；端口冲突会在模型启动前报出副本、端口用途和号码。
+`--server-urls` 模式使用你提供的地址，不会自动改写已有服务地址。
 自动启动模式会在完成、失败或收到 Ctrl-C/SIGTERM 后清理本次启动的服务进程组。
 可在 tmux 中运行完整命令以保持长任务。
 
@@ -81,7 +94,7 @@ bash infer_smoke_8gpu.sh --max-concurrency 2 --output-dir results/smoke_c2
 results/smoke/
   manifest.json                  # 总量、耗时、新提交并完成的吞吐（不含模型启动）
   logs/<本次运行编号>/server_30010.log
-  logs/<本次运行编号>/server_30011.log
+  logs/<本次运行编号>/server_30012.log
   metadata_smoke_v2/
     manifest.json
     videos/*.mp4
@@ -102,9 +115,15 @@ results/smoke/
 输出目录有进程锁，防止两个新入口同时覆盖相同结果。
 每次启动服务都会创建独立的日志目录，并打印本次日志的完整路径；旧日志保留供排查，
 不会继续追加到旧文件。日志首行记录实际启动命令和 GPU 分组。
+服务启动失败或超时时，终端自动打印各服务日志末尾（最多 40 行 / 8 KiB），
+并清理本次启动的进程组。看到第一个服务也退出时，应先看第二个服务的原始错误，
+这可能是启动器发现某个副本失败后触发的统一清理。
 
 所有视频成功退出码为 0，部分失败为 1，配置/启动错误为 2，中断为 130。
 中断时停止领取新任务；正在进行的 HTTP 调用最多等待本次请求超时后退出。
 结果按 MP4 文件头验证，沿用旧客户端；这不代替实际视频内容和音画质量检查。
 
 本地验证：`python3 -m unittest discover -s tests -v`。
+回归测试用真实子进程绑定 HTTP、HTTP+1 Broker、master、scheduler 四类端口，
+覆盖旧布局冲突、全部八个端口的占用预检、端口越界、双副本提交和恢复、
+启动失败/超时诊断与进程清理；不需要安装 SGLang 或访问 GPU。

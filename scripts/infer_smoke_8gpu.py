@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import errno
 import fcntl
 import os
 import queue
@@ -41,7 +42,8 @@ def build_parser():
                         help="每个副本的物理 GPU ID；默认两个 4 卡组")
     parser.add_argument("--tp-size", type=int, default=2)
     parser.add_argument("--ulysses-degree", type=int, default=2)
-    parser.add_argument("--base-port", type=int, default=30010)
+    parser.add_argument("--base-port", type=int, default=30010,
+                        help="HTTP 端口起点，副本间隔 2；每个 HTTP+1 留给 ZMQ Broker")
     parser.add_argument("--base-master-port", "--base-nccl-port", dest="base_master_port",
                         type=int, default=31010,
                         help="分布式初始化端口起点；旧名称 --base-nccl-port 是兼容别名，实际传入 --master-port")
@@ -67,14 +69,27 @@ def make_client(url, args, stop_event, *, probe=False):
     )
 
 
+def replica_ports(args, index):
+    # SGLang Diffusion also binds a ZMQ broker at HTTP+1. Adjacent HTTP
+    # ports collide only AFTER expensive model loading has completed.
+    http = args.base_port + 2 * index
+    return {"HTTP": http, "ZMQ Broker (HTTP+1)": http + 1,
+            "master": args.base_master_port + index,
+            "scheduler": args.base_scheduler_port + index}
+
+
 def server_commands(args):
     for token in args.server_arg:
-        if token.split("=", 1)[0] in {"--port", "--master-port", "--scheduler-port", "--nccl-port"}:
+        if token.split("=", 1)[0] in {
+            "--port", "--broker-port", "--master-port", "--scheduler-port", "--nccl-port",
+        }:
             raise batch.BatchError("请使用 --base-port/--base-master-port/--base-scheduler-port 设置端口，"
                                    "不能通过 --server-arg 给所有副本覆盖为同一个端口")
+        if token.split("=", 1)[0] == "--host":
+            raise batch.BatchError("自动启动固定使用 127.0.0.1，不能通过 --server-arg 覆盖 --host")
     seen = set()
     commands = []
-    ports = []
+    port_owners = {}
     for index, group in enumerate(args.gpu_groups):
         ids = group.split(",")
         if any(not value.isdigit() for value in ids) or len(set(ids)) != len(ids):
@@ -84,10 +99,15 @@ def server_commands(args):
         seen.update(ids)
         if len(ids) != args.tp_size * args.ulysses_degree:
             raise batch.BatchError(f"GPU 组 {group} 的卡数必须等于 TP × Ulysses")
-        port = args.base_port + index
-        master = args.base_master_port + index
-        scheduler = args.base_scheduler_port + index
-        ports.extend([port, master, scheduler])
+        ports = replica_ports(args, index)
+        for role, port in ports.items():
+            owner = f"副本 {index + 1} (GPU={group}) {role}"
+            if not 1 <= port <= 65535:
+                raise batch.BatchError(f"{owner} 端口 {port} 超出 1–65535 范围")
+            if port in port_owners:
+                raise batch.BatchError(f"端口 {port} 冲突：{port_owners[port]} 与 {owner}；"
+                                       "每个 HTTP+1 必须留给 ZMQ Broker")
+            port_owners[port] = owner
         # Diffusion's distributed rendezvous uses master_port. Checking a
         # shared default before launch is racy: both replicas can choose it
         # before either worker binds. Allocate distinct ports explicitly.
@@ -96,13 +116,49 @@ def server_commands(args):
             "--num-gpus", str(len(ids)), "--tp-size", str(args.tp_size),
             "--ulysses-degree", str(args.ulysses_degree),
             "--performance-mode", "speed", "--host", "127.0.0.1",
-            "--port", str(port), "--master-port", str(master),
-            "--scheduler-port", str(scheduler),
+            "--port", str(ports["HTTP"]), "--master-port", str(ports["master"]),
+            "--scheduler-port", str(ports["scheduler"]),
             "--model-variant", "fl2va", *args.server_arg,
         ]))
-    if len(set(ports)) != len(ports) or any(not 1 <= p <= 65535 for p in ports):
-        raise batch.BatchError("HTTP/master/scheduler 端口必须各不相同且在 1–65535 之间")
-    return commands, ports
+    return commands, list(port_owners)
+
+
+def check_ports_available(args, commands):
+    # Check all listeners, including the implicit broker, before loading GPUs.
+    for index, (group, _) in enumerate(commands):
+        for role, port in replica_ports(args, index).items():
+            try:
+                # On some OSes SO_REUSEADDR allows a loopback bind alongside
+                # a live wildcard listener. Probe it before the restart-safe
+                # bind check so it cannot be mistaken for an available port.
+                with socket.socket() as probe:
+                    probe.settimeout(.2)
+                    if probe.connect_ex(("127.0.0.1", port)) == 0:
+                        raise OSError(errno.EADDRINUSE, "address already in use")
+                with socket.socket() as sock:
+                    # TIME_WAIT from the previous run is harmless; a live
+                    # listener (including a wildcard bind) must block launch.
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    sock.bind(("127.0.0.1", port))
+                    sock.listen(1)
+            except OSError as exc:
+                raise batch.BatchError(
+                    f"副本 {index + 1} (GPU={group}) {role} 端口 {port} 不可用: {exc}；"
+                    "尚未启动模型。请停止占用该端口的服务，或修改 "
+                    "--base-port/--base-master-port/--base-scheduler-port；"
+                    "连接已有服务请使用 --server-urls") from exc
+
+
+def print_server_log_tails(log_paths):
+    for path in log_paths:
+        try:
+            with path.open("rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                handle.seek(max(0, handle.tell() - 8192))
+                tail = "\n".join(handle.read().decode("utf-8", "replace").splitlines()[-40:])
+            batch.log(f"服务日志末尾: {path}\n{tail}")
+        except OSError as exc:
+            batch.log(f"无法读取服务日志 {path}: {exc}")
 
 
 def prepare(args, urls):
@@ -249,9 +305,9 @@ def run(args, stop_event):
     args.output_dir = args.output_dir.expanduser().resolve()
     if args.startup_timeout <= 0 or args.tp_size <= 0 or args.ulysses_degree <= 0:
         raise batch.BatchError("startup-timeout、tp-size 和 ulysses-degree 必须大于 0")
-    commands, ports = ([], []) if args.server_urls else server_commands(args)
-    urls = args.server_urls or [f"http://127.0.0.1:{args.base_port + i}"
-                               for i in range(len(commands))]
+    commands, _ = ([], []) if args.server_urls else server_commands(args)
+    http_ports = [replica_ports(args, i)["HTTP"] for i in range(len(commands))]
+    urls = args.server_urls or [f"http://127.0.0.1:{port}" for port in http_ports]
     clients = [make_client(url, args, stop_event) for url in urls]
     urls = [client.server_url for client in clients]
     if len(set(urls)) != len(urls):
@@ -259,7 +315,8 @@ def run(args, stop_event):
     datasets, shared, pinned = prepare(args, urls)
     batch.log(f"{sum(len(cases) for _, cases in datasets)} 个 case，{len(clients)} 个副本，"
               f"每副本 {args.max_concurrency} 个在途请求；输出: {args.output_dir}")
-    for group, command in commands:
+    for index, (group, command) in enumerate(commands):
+        batch.log(f"副本 {index + 1} 端口: {replica_ports(args, index)}")
         batch.log(f"CUDA_VISIBLE_DEVICES={group} {shlex.join(command)}")
     if args.dry_run:
         for options, _ in datasets:
@@ -267,27 +324,18 @@ def run(args, stop_event):
         return 0
 
     processes = []
+    log_paths = []
     try:
         if commands:
             if not shutil.which("sglang"):
                 raise batch.BatchError("找不到 sglang；请在已跑通推理的 Python 环境执行")
-            for port in ports:
-                with socket.socket() as sock:
-                    try:
-                        # Match restartable server sockets: TIME_WAIT from the
-                        # previous run is harmless, but a live listener is not.
-                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                        sock.bind(("127.0.0.1", port))
-                        sock.listen(1)
-                    except OSError as exc:
-                        raise batch.BatchError(
-                            f"端口 {port} 不可用；可用 --server-urls 连接已有服务，"
-                            "或修改 --base-port/--base-master-port/--base-scheduler-port") from exc
+            check_ports_available(args, commands)
             run_id = f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{time.time_ns()}"
             log_dir = args.output_dir / "logs" / run_id
             log_dir.mkdir(parents=True, exist_ok=True)
             for index, (group, command) in enumerate(commands):
-                log_path = log_dir / f"server_{args.base_port + index}.log"
+                log_path = log_dir / f"server_{http_ports[index]}.log"
+                log_paths.append(log_path)
                 with log_path.open("w") as handle:
                     handle.write(f"CUDA_VISIBLE_DEVICES={group} {shlex.join(command)}\n")
                     handle.flush()
@@ -305,7 +353,8 @@ def run(args, stop_event):
                     return 130
                 for index, process in enumerate(processes):
                     if process.poll() is not None:
-                        raise batch.BatchError(f"服务 {urls[index]} 已退出 ({process.returncode})；请检查日志")
+                        raise batch.BatchError(f"服务 {urls[index]} 已退出 ({process.returncode})；"
+                                               f"日志: {log_paths[index]}")
                 for url in list(pending):
                     try:
                         make_client(url, args, stop_event, probe=True).check_server()
@@ -324,6 +373,9 @@ def run(args, stop_event):
             for client in clients:
                 client.check_server()
         return run_work(args, clients, datasets, shared, pinned, stop_event)
+    except (batch.BatchError, OSError):
+        print_server_log_tails(log_paths)
+        raise
     finally:
         stop_servers(processes)
 

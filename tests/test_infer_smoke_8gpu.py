@@ -101,6 +101,28 @@ class SmokeTest(unittest.TestCase):
                 "--server-urls", *[f"http://127.0.0.1:{s.server_port}" for s in instances],
                 *extra]
 
+    def launch_argv(self):
+        # Reserve the full eight-port footprint while finding an unused block.
+        for _ in range(100):
+            with contextlib.ExitStack() as stack:
+                first = stack.enter_context(socket.socket())
+                first.bind(("127.0.0.1", 0))
+                base = first.getsockname()[1]
+                if base > 65528:
+                    continue
+                try:
+                    for port in range(base + 1, base + 8):
+                        stack.enter_context(socket.socket()).bind(("127.0.0.1", port))
+                except OSError:
+                    continue
+                break
+        else:
+            self.fail("Could not allocate eight free test ports")
+        return ["--metadata", str(self.metadata[0]), "--metadata-v1", str(self.metadata[1]),
+                "--output-dir", str(self.output), "--limit", "1", "--startup-timeout", "15",
+                "--base-port", str(base), "--base-master-port", str(base + 4),
+                "--base-scheduler-port", str(base + 6)]
+
     def test_two_replicas_balance_and_resume_completed(self):
         # Both first POSTs must be in flight together or the barrier fails.
         with servers(barrier=threading.Barrier(2)) as instances:
@@ -194,10 +216,11 @@ class SmokeTest(unittest.TestCase):
         args = smoke.build_parser().parse_args([])
         commands, ports = smoke.server_commands(args)
         parsed = [legacy_cli.parse_args(command[2:]) for _, command in commands]
-        self.assertEqual([item.port for item in parsed], ["30010", "30011"])
+        self.assertEqual([item.port for item in parsed], ["30010", "30012"])
         self.assertEqual([item.master_port for item in parsed], ["31010", "31011"])
         self.assertEqual([item.scheduler_port for item in parsed], ["32010", "32011"])
-        self.assertEqual(len(set(ports)), 6)
+        self.assertEqual(set(ports), {30010, 30011, 30012, 30013,
+                                     31010, 31011, 32010, 32011})
         self.assertEqual([group for group, _ in commands], ["0,1,2,3", "4,5,6,7"])
 
     def test_legacy_nccl_option_maps_to_master_ports(self):
@@ -206,34 +229,58 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual([command[command.index("--master-port") + 1]
                           for _, command in commands], ["31010", "31011"])
         self.assertFalse(any("--nccl-port" in command for _, command in commands))
-        self.assertEqual(set(ports), {30010, 30011, 31010, 31011, 32010, 32011})
+        self.assertEqual(set(ports), {30010, 30011, 30012, 30013,
+                                     31010, 31011, 32010, 32011})
         args.base_master_port = 30011
         with self.assertRaises(smoke.batch.BatchError):
             smoke.server_commands(args)
 
     def test_shared_port_override_is_rejected(self):
-        for token in ("--master-port=30005", "--scheduler-port", "--port=30010", "--nccl-port"):
+        for token in ("--master-port=30005", "--scheduler-port", "--port=30010", "--nccl-port",
+                      "--broker-port=30011", "--broker-port", "--host=0.0.0.0"):
             args = smoke.build_parser().parse_args([f"--server-arg={token}"])
             with self.subTest(token=token), self.assertRaises(smoke.batch.BatchError):
                 smoke.server_commands(args)
 
-    def test_live_master_listener_blocks_launch(self):
-        with socket.socket() as listener:
-            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            listener.bind(("127.0.0.1", 0))
-            listener.listen()
-            port = listener.getsockname()[1]
-            with mock.patch.object(smoke.shutil, "which", return_value="sglang"), \
-                    mock.patch.object(smoke.subprocess, "Popen") as launch:
-                self.assertEqual(smoke.main([
-                    "--metadata", str(self.metadata[0]), "--metadata-v1", str(self.metadata[1]),
-                    "--output-dir", str(self.output), "--base-master-port", str(port)
-                ]), 2)
-                launch.assert_not_called()
+    def test_broker_cannot_overlap_master_or_scheduler(self):
+        for flag, port in (("--base-master-port", 30011), ("--base-scheduler-port", 30013),
+                           ("--base-master-port", 30009)):
+            args = smoke.build_parser().parse_args([flag, str(port)])
+            with self.subTest(flag=flag, port=port), self.assertRaisesRegex(
+                    smoke.batch.BatchError, "端口 .*冲突"):
+                smoke.server_commands(args)
 
-    def test_launch_two_processes_with_distinct_listeners_and_separate_run_logs(self):
-        # Real child processes bind all three ports, so using a shared default
-        # reproduces EADDRINUSE. No GPU or installed SGLang is needed.
+    def test_port_range_includes_last_broker(self):
+        args = smoke.build_parser().parse_args(["--base-port", "65532"])
+        _, ports = smoke.server_commands(args)
+        self.assertIn(65535, ports)
+        for flag, port in (("--base-port", 65533), ("--base-port", 0),
+                           ("--base-master-port", 65535), ("--base-scheduler-port", 65535)):
+            args = smoke.build_parser().parse_args([flag, str(port)])
+            with self.subTest(flag=flag), self.assertRaisesRegex(
+                    smoke.batch.BatchError, "超出 1–65535"):
+                smoke.server_commands(args)
+
+    def test_live_listener_on_any_port_blocks_all_launches(self):
+        argv = self.launch_argv()
+        args = smoke.build_parser().parse_args(argv)
+        for index in range(2):
+            for role, port in smoke.replica_ports(args, index).items():
+                for host in ("127.0.0.1", "0.0.0.0"):
+                    with self.subTest(index=index, role=role, host=host), socket.socket() as listener:
+                        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        listener.bind((host, port))
+                        listener.listen()
+                        with mock.patch.object(smoke.shutil, "which", return_value="sglang"), \
+                                mock.patch.object(smoke.subprocess, "Popen",
+                                                  side_effect=AssertionError("端口占用时启动了模型")), \
+                                mock.patch.object(smoke.batch, "log") as log:
+                            self.assertEqual(smoke.main(argv), 2)
+                            self.assertIn(f"{role} 端口 {port} 不可用", log.call_args.args[0])
+
+    def write_server_stub(self):
+        # Match all FOUR listeners, including SGLang's implicit HTTP+1 broker.
+        # The previous three-port stub could not reproduce the production bug.
         stub = self.root / "sglang_stub.py"
         stub.write_text(f'''import argparse, socket, sys
 sys.path.insert(0, {str(Path(__file__).resolve().parent)!r})
@@ -247,7 +294,7 @@ p.add_argument("--master-port", type=int, default=30005)
 p.add_argument("--scheduler-port", type=int, default=5555)
 a = p.parse_args()
 listeners = []
-for port in (a.master_port, a.scheduler_port):
+for port in (a.master_port, a.scheduler_port, int(a.port) + 1):
     listener = socket.socket()
     listener.bind(("127.0.0.1", port))
     listener.listen()
@@ -255,29 +302,15 @@ for port in (a.master_port, a.scheduler_port):
 s = ThreadingHTTPServer((a.host, int(a.port)), Handler)
 s.submitted, s.reads, s.failed_ids = [], [], set()
 s.barrier, s.delay = None, 0
+print("All four listeners bound", flush=True)
 s.serve_forever()
 ''')
-        # Find a currently unused six-port block, reserving all of it while
-        # checking; release it immediately before the launcher preflight.
-        for _ in range(100):
-            with contextlib.ExitStack() as stack:
-                first = stack.enter_context(socket.socket())
-                first.bind(("127.0.0.1", 0))
-                base = first.getsockname()[1]
-                if base > 65530:
-                    continue
-                try:
-                    for port in range(base + 1, base + 6):
-                        stack.enter_context(socket.socket()).bind(("127.0.0.1", port))
-                except OSError:
-                    continue
-                break
-        else:
-            self.fail("Could not allocate six free test ports")
-        argv = ["--metadata", str(self.metadata[0]), "--metadata-v1", str(self.metadata[1]),
-                "--output-dir", str(self.output), "--limit", "1", "--startup-timeout", "15",
-                "--base-port", str(base), "--base-master-port", str(base + 2),
-                "--base-scheduler-port", str(base + 4)]
+        return stub
+
+    def test_launch_two_processes_with_distinct_listeners_and_separate_run_logs(self):
+        stub = self.write_server_stub()
+        argv = self.launch_argv()
+        base = int(argv[argv.index("--base-port") + 1])
         real_popen = smoke.subprocess.Popen
         children = []
 
@@ -291,10 +324,70 @@ s.serve_forever()
             self.assertEqual(smoke.main(argv), 0)
             original_logs = {path: path.read_bytes() for path in self.output.glob("logs/*/*.log")}
             self.assertEqual(len(original_logs), 2)
+            self.assertEqual({p.name for p in original_logs},
+                             {f"server_{base}.log", f"server_{base + 2}.log"})
+            self.assertTrue(all(b"All four listeners bound" in value
+                                for value in original_logs.values()))
+            summary = json.loads((self.output / "manifest.json").read_text())
+            self.assertEqual(summary["server_urls"], [f"http://127.0.0.1:{base}",
+                                                     f"http://127.0.0.1:{base + 2}"])
             self.assertEqual(smoke.main(argv), 0)
         self.assertEqual(len(list(self.output.glob("logs/*/*.log"))), 4)
         for path, contents in original_logs.items():
             self.assertEqual(path.read_bytes(), contents)
+        self.assertTrue(all(child.poll() is not None for child in children))
+
+    def test_old_adjacent_http_ports_fail_and_print_diagnostics_and_cleanup(self):
+        stub = self.write_server_stub()
+        argv = self.launch_argv()
+        base = int(argv[argv.index("--base-port") + 1])
+        real_popen = smoke.subprocess.Popen
+        children = []
+
+        def launch(command, **kwargs):
+            command = list(command)
+            if children:
+                # Inject the old layout AFTER preflight to reproduce the
+                # log's HTTP/Broker bind failure in real child processes.
+                command[command.index("--port") + 1] = str(base + 1)
+            process = real_popen([sys.executable, str(stub), *command[1:]], **kwargs)
+            children.append(process)
+            return process
+
+        with mock.patch.object(smoke.shutil, "which", return_value=str(stub)), \
+                mock.patch.object(smoke.subprocess, "Popen", side_effect=launch), \
+                mock.patch.object(smoke.batch, "log") as log, \
+                mock.patch.object(smoke, "run_work") as work:
+            self.assertEqual(smoke.main(argv), 2)
+            work.assert_not_called()
+        messages = "\n".join(call.args[0] for call in log.call_args_list)
+        self.assertIn("Address already in use", messages)
+        self.assertIn("服务日志末尾:", messages)
+        self.assertIn("已退出", messages)
+        self.assertTrue(all(child.poll() is not None for child in children))
+        args = smoke.build_parser().parse_args(argv)
+        smoke.check_ports_available(args, smoke.server_commands(args)[0])
+
+    def test_startup_timeout_reports_log_tails_and_cleans_up(self):
+        stub = self.write_server_stub()
+        argv = self.launch_argv() + ["--startup-timeout", ".1"]
+        real_popen = smoke.subprocess.Popen
+        children = []
+
+        def launch(command, **kwargs):
+            process = real_popen([sys.executable, str(stub), *command[1:]], **kwargs)
+            children.append(process)
+            return process
+
+        with mock.patch.object(smoke.shutil, "which", return_value=str(stub)), \
+                mock.patch.object(smoke.subprocess, "Popen", side_effect=launch), \
+                mock.patch.object(smoke.batch.SGLangClient, "check_server",
+                                  side_effect=smoke.batch.ApiError("still loading")), \
+                mock.patch.object(smoke.batch, "log") as log:
+            self.assertEqual(smoke.main(argv), 2)
+        messages = "\n".join(call.args[0] for call in log.call_args_list)
+        self.assertIn("模型启动超时", messages)
+        self.assertIn("All four listeners bound", messages)
         self.assertTrue(all(child.poll() is not None for child in children))
 
     def test_cancel_interrupts_poll_wait(self):
