@@ -13,10 +13,12 @@ bash infer_smoke_8gpu.sh \
 
 默认 GPU 分组 `0,1,2,3` 和 `4,5,6,7`，每组沿用已跑通的
 `--num-gpus 4 --tp-size 2 --ulysses-degree 2 --performance-mode speed`。
-HTTP 端口为 `30010/30011`，通信端口沿用当前 SGLang 版本自身的配置。
-默认不传入 `--nccl-port`，以兼容不提供该命令行参数的 SGLang 版本。
-如果已确认当前版本支持该参数，可以显式使用 `--base-nccl-port 31010`，
-为两个副本分别传入 `31010/31011`，并启用对应端口的占用检查。
+HTTP 端口为 `30010/30011`，分布式初始化端口 `--master-port` 为 `31010/31011`，
+调度器端口 `--scheduler-port` 为 `32010/32011`。启动前校验所有端口均不重复且未被占用。
+SGLang Diffusion 的两个副本如果都使用默认 `master_port=30005`，可能在同时启动时
+发生 `EADDRINUSE`；仅分开 HTTP 端口不能隔离分布式初始化。
+本入口不传入 `--nccl-port`。旧参数 `--base-nccl-port` 作为 `--base-master-port` 的兼容别名，
+实际始终传入 Diffusion 使用的 `--master-port`。
 各组内部做模型并行，两组之间处理不同视频。两份 CSV 共用任务队列，
 谁先完成谁领取下一条；不会给慢副本固定分配一半数据。
 每个副本默认仅一个在途请求，总计两个，避免把 HTTP 排队误当成 GPU 并行。
@@ -29,14 +31,15 @@ HTTP 端口为 `30010/30011`，通信端口沿用当前 SGLang 版本自身的�
 
 ## 已有服务与参数调整
 
-如果已经运行了原来的四卡服务，请先停止它再使用自动启动入口，或者在其余四张卡上启动第二个服务：
+如果已经运行了原来的四卡服务（HTTP 30010、master 30005），请先停止它再使用自动启动入口，
+或者在其余四张卡上启动第二个服务，并显式使用不同的内部端口：
 
 ```bash
 CUDA_VISIBLE_DEVICES=4,5,6,7 sglang serve \
   --model-path /srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3 \
   --num-gpus 4 --tp-size 2 --ulysses-degree 2 \
   --performance-mode speed --host 127.0.0.1 \
-  --port 30011 --model-variant fl2va
+  --port 30011 --master-port 31011 --scheduler-port 32011 --model-variant fl2va
 
 # 在另一个终端连接两组服务；该模式不会启动或停止它们
 bash infer_smoke_8gpu.sh \
@@ -77,8 +80,8 @@ bash infer_smoke_8gpu.sh --max-concurrency 2 --output-dir results/smoke_c2
 ```text
 results/smoke/
   manifest.json                  # 总量、耗时、新提交并完成的吞吐（不含模型启动）
-  logs/server_30010.log
-  logs/server_30011.log
+  logs/<本次运行编号>/server_30010.log
+  logs/<本次运行编号>/server_30011.log
   metadata_smoke_v2/
     manifest.json
     videos/*.mp4
@@ -97,6 +100,8 @@ results/smoke/
 `--force` 强制重跑全部选中数据。若原服务地址改变，先恢复原地址，或确认重跑后用 `--force`。
 旧客户端没有记录服务地址的状态文件按 `--server-url` 归属恢复。
 输出目录有进程锁，防止两个新入口同时覆盖相同结果。
+每次启动服务都会创建独立的日志目录，并打印本次日志的完整路径；旧日志保留供排查，
+不会继续追加到旧文件。日志首行记录实际启动命令和 GPU 分组。
 
 所有视频成功退出码为 0，部分失败为 1，配置/启动错误为 2，中断为 130。
 中断时停止领取新任务；正在进行的 HTTP 调用最多等待本次请求超时后退出。

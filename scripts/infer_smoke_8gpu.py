@@ -42,8 +42,11 @@ def build_parser():
     parser.add_argument("--tp-size", type=int, default=2)
     parser.add_argument("--ulysses-degree", type=int, default=2)
     parser.add_argument("--base-port", type=int, default=30010)
-    parser.add_argument("--base-nccl-port", type=int,
-                        help="可选：仅当所用 SGLang 支持 --nccl-port 时设置；默认沿用服务自身的通信端口配置")
+    parser.add_argument("--base-master-port", "--base-nccl-port", dest="base_master_port",
+                        type=int, default=31010,
+                        help="分布式初始化端口起点；旧名称 --base-nccl-port 是兼容别名，实际传入 --master-port")
+    parser.add_argument("--base-scheduler-port", type=int, default=32010,
+                        help="调度器端口起点，每个副本使用独立端口")
     parser.add_argument("--startup-timeout", type=float, default=1800)
     parser.add_argument("--server-arg", action="append", default=[],
                         help="附加 serve 参数，每个 token 用 --server-arg=TOKEN 传入")
@@ -65,6 +68,10 @@ def make_client(url, args, stop_event, *, probe=False):
 
 
 def server_commands(args):
+    for token in args.server_arg:
+        if token.split("=", 1)[0] in {"--port", "--master-port", "--scheduler-port", "--nccl-port"}:
+            raise batch.BatchError("请使用 --base-port/--base-master-port/--base-scheduler-port 设置端口，"
+                                   "不能通过 --server-arg 给所有副本覆盖为同一个端口")
     seen = set()
     commands = []
     ports = []
@@ -78,24 +85,23 @@ def server_commands(args):
         if len(ids) != args.tp_size * args.ulysses_degree:
             raise batch.BatchError(f"GPU 组 {group} 的卡数必须等于 TP × Ulysses")
         port = args.base_port + index
-        ports.append(port)
-        communication_args = []
-        # The known-working deployment does not pass --nccl-port. Some
-        # SGLang diffusion releases do not expose it in their CLI at all.
-        if args.base_nccl_port is not None:
-            nccl = args.base_nccl_port + index
-            ports.append(nccl)
-            communication_args = ["--nccl-port", str(nccl)]
+        master = args.base_master_port + index
+        scheduler = args.base_scheduler_port + index
+        ports.extend([port, master, scheduler])
+        # Diffusion's distributed rendezvous uses master_port. Checking a
+        # shared default before launch is racy: both replicas can choose it
+        # before either worker binds. Allocate distinct ports explicitly.
         commands.append((group, [
             "sglang", "serve", "--model-path", args.model_path,
             "--num-gpus", str(len(ids)), "--tp-size", str(args.tp_size),
             "--ulysses-degree", str(args.ulysses_degree),
             "--performance-mode", "speed", "--host", "127.0.0.1",
-            "--port", str(port), *communication_args,
+            "--port", str(port), "--master-port", str(master),
+            "--scheduler-port", str(scheduler),
             "--model-variant", "fl2va", *args.server_arg,
         ]))
     if len(set(ports)) != len(ports) or any(not 1 <= p <= 65535 for p in ports):
-        raise batch.BatchError("HTTP/NCCL 端口必须各不相同且在 1–65535 之间")
+        raise batch.BatchError("HTTP/master/scheduler 端口必须各不相同且在 1–65535 之间")
     return commands, ports
 
 
@@ -268,16 +274,23 @@ def run(args, stop_event):
             for port in ports:
                 with socket.socket() as sock:
                     try:
+                        # Match restartable server sockets: TIME_WAIT from the
+                        # previous run is harmless, but a live listener is not.
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         sock.bind(("127.0.0.1", port))
+                        sock.listen(1)
                     except OSError as exc:
                         raise batch.BatchError(
                             f"端口 {port} 不可用；可用 --server-urls 连接已有服务，"
-                            "或修改 --base-port/--base-nccl-port") from exc
-            log_dir = args.output_dir / "logs"
+                            "或修改 --base-port/--base-master-port/--base-scheduler-port") from exc
+            run_id = f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{time.time_ns()}"
+            log_dir = args.output_dir / "logs" / run_id
             log_dir.mkdir(parents=True, exist_ok=True)
             for index, (group, command) in enumerate(commands):
                 log_path = log_dir / f"server_{args.base_port + index}.log"
-                with log_path.open("a") as handle:
+                with log_path.open("w") as handle:
+                    handle.write(f"CUDA_VISIBLE_DEVICES={group} {shlex.join(command)}\n")
+                    handle.flush()
                     process = subprocess.Popen(
                         command, env={**os.environ, "CUDA_VISIBLE_DEVICES": group,
                                       "PYTHONUNBUFFERED": "1"},

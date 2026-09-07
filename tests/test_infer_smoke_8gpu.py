@@ -4,11 +4,13 @@ import contextlib
 import argparse
 import csv
 import json
+import socket
 import sys
 import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -182,28 +184,118 @@ class SmokeTest(unittest.TestCase):
             smoke.server_commands(args)
 
     def test_default_commands_work_with_cli_without_nccl_port(self):
-        # Reproduce the installed CLI's contract: it accepts the original
-        # proven serve flags but rejects unknown flags such as --nccl-port.
+        # Reproduce Diffusion's CLI, which exposes master/scheduler ports
+        # but rejects --nccl-port.
         legacy_cli = argparse.ArgumentParser()
         for flag in ("--model-path", "--num-gpus", "--tp-size", "--ulysses-degree",
-                     "--performance-mode", "--host", "--port", "--model-variant"):
+                     "--performance-mode", "--host", "--port", "--model-variant",
+                     "--master-port", "--scheduler-port"):
             legacy_cli.add_argument(flag)
         args = smoke.build_parser().parse_args([])
         commands, ports = smoke.server_commands(args)
         parsed = [legacy_cli.parse_args(command[2:]) for _, command in commands]
         self.assertEqual([item.port for item in parsed], ["30010", "30011"])
-        self.assertEqual(ports, [30010, 30011])
+        self.assertEqual([item.master_port for item in parsed], ["31010", "31011"])
+        self.assertEqual([item.scheduler_port for item in parsed], ["32010", "32011"])
+        self.assertEqual(len(set(ports)), 6)
         self.assertEqual([group for group, _ in commands], ["0,1,2,3", "4,5,6,7"])
 
-    def test_explicit_nccl_ports_are_distinct_and_validated(self):
+    def test_legacy_nccl_option_maps_to_master_ports(self):
         args = smoke.build_parser().parse_args(["--base-nccl-port", "31010"])
         commands, ports = smoke.server_commands(args)
-        self.assertEqual([command[command.index("--nccl-port") + 1]
+        self.assertEqual([command[command.index("--master-port") + 1]
                           for _, command in commands], ["31010", "31011"])
-        self.assertEqual(set(ports), {30010, 30011, 31010, 31011})
-        args.base_nccl_port = 30011
+        self.assertFalse(any("--nccl-port" in command for _, command in commands))
+        self.assertEqual(set(ports), {30010, 30011, 31010, 31011, 32010, 32011})
+        args.base_master_port = 30011
         with self.assertRaises(smoke.batch.BatchError):
             smoke.server_commands(args)
+
+    def test_shared_port_override_is_rejected(self):
+        for token in ("--master-port=30005", "--scheduler-port", "--port=30010", "--nccl-port"):
+            args = smoke.build_parser().parse_args([f"--server-arg={token}"])
+            with self.subTest(token=token), self.assertRaises(smoke.batch.BatchError):
+                smoke.server_commands(args)
+
+    def test_live_master_listener_blocks_launch(self):
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            with mock.patch.object(smoke.shutil, "which", return_value="sglang"), \
+                    mock.patch.object(smoke.subprocess, "Popen") as launch:
+                self.assertEqual(smoke.main([
+                    "--metadata", str(self.metadata[0]), "--metadata-v1", str(self.metadata[1]),
+                    "--output-dir", str(self.output), "--base-master-port", str(port)
+                ]), 2)
+                launch.assert_not_called()
+
+    def test_launch_two_processes_with_distinct_listeners_and_separate_run_logs(self):
+        # Real child processes bind all three ports, so using a shared default
+        # reproduces EADDRINUSE. No GPU or installed SGLang is needed.
+        stub = self.root / "sglang_stub.py"
+        stub.write_text(f'''import argparse, socket, sys
+sys.path.insert(0, {str(Path(__file__).resolve().parent)!r})
+from test_infer_smoke_8gpu import Handler, ThreadingHTTPServer
+p = argparse.ArgumentParser()
+p.add_argument("command", choices=["serve"])
+for flag in ("--model-path", "--num-gpus", "--tp-size", "--ulysses-degree",
+             "--performance-mode", "--host", "--port", "--model-variant"):
+    p.add_argument(flag)
+p.add_argument("--master-port", type=int, default=30005)
+p.add_argument("--scheduler-port", type=int, default=5555)
+a = p.parse_args()
+listeners = []
+for port in (a.master_port, a.scheduler_port):
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", port))
+    listener.listen()
+    listeners.append(listener)
+s = ThreadingHTTPServer((a.host, int(a.port)), Handler)
+s.submitted, s.reads, s.failed_ids = [], [], set()
+s.barrier, s.delay = None, 0
+s.serve_forever()
+''')
+        # Find a currently unused six-port block, reserving all of it while
+        # checking; release it immediately before the launcher preflight.
+        for _ in range(100):
+            with contextlib.ExitStack() as stack:
+                first = stack.enter_context(socket.socket())
+                first.bind(("127.0.0.1", 0))
+                base = first.getsockname()[1]
+                if base > 65530:
+                    continue
+                try:
+                    for port in range(base + 1, base + 6):
+                        stack.enter_context(socket.socket()).bind(("127.0.0.1", port))
+                except OSError:
+                    continue
+                break
+        else:
+            self.fail("Could not allocate six free test ports")
+        argv = ["--metadata", str(self.metadata[0]), "--metadata-v1", str(self.metadata[1]),
+                "--output-dir", str(self.output), "--limit", "1", "--startup-timeout", "15",
+                "--base-port", str(base), "--base-master-port", str(base + 2),
+                "--base-scheduler-port", str(base + 4)]
+        real_popen = smoke.subprocess.Popen
+        children = []
+
+        def launch(command, **kwargs):
+            process = real_popen([sys.executable, str(stub), *command[1:]], **kwargs)
+            children.append(process)
+            return process
+
+        with mock.patch.object(smoke.shutil, "which", return_value=str(stub)), \
+                mock.patch.object(smoke.subprocess, "Popen", side_effect=launch):
+            self.assertEqual(smoke.main(argv), 0)
+            original_logs = {path: path.read_bytes() for path in self.output.glob("logs/*/*.log")}
+            self.assertEqual(len(original_logs), 2)
+            self.assertEqual(smoke.main(argv), 0)
+        self.assertEqual(len(list(self.output.glob("logs/*/*.log"))), 4)
+        for path, contents in original_logs.items():
+            self.assertEqual(path.read_bytes(), contents)
+        self.assertTrue(all(child.poll() is not None for child in children))
 
     def test_cancel_interrupts_poll_wait(self):
         event = threading.Event()
