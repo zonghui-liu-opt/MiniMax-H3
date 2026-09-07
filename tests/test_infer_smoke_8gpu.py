@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import argparse
 import csv
 import json
 import sys
@@ -177,6 +178,30 @@ class SmokeTest(unittest.TestCase):
 
     def test_invalid_gpu_groups(self):
         args = smoke.build_parser().parse_args(["--gpu-groups", "0,1,2,3", "3,4,5,6"])
+        with self.assertRaises(smoke.batch.BatchError):
+            smoke.server_commands(args)
+
+    def test_default_commands_work_with_cli_without_nccl_port(self):
+        # Reproduce the installed CLI's contract: it accepts the original
+        # proven serve flags but rejects unknown flags such as --nccl-port.
+        legacy_cli = argparse.ArgumentParser()
+        for flag in ("--model-path", "--num-gpus", "--tp-size", "--ulysses-degree",
+                     "--performance-mode", "--host", "--port", "--model-variant"):
+            legacy_cli.add_argument(flag)
+        args = smoke.build_parser().parse_args([])
+        commands, ports = smoke.server_commands(args)
+        parsed = [legacy_cli.parse_args(command[2:]) for _, command in commands]
+        self.assertEqual([item.port for item in parsed], ["30010", "30011"])
+        self.assertEqual(ports, [30010, 30011])
+        self.assertEqual([group for group, _ in commands], ["0,1,2,3", "4,5,6,7"])
+
+    def test_explicit_nccl_ports_are_distinct_and_validated(self):
+        args = smoke.build_parser().parse_args(["--base-nccl-port", "31010"])
+        commands, ports = smoke.server_commands(args)
+        self.assertEqual([command[command.index("--nccl-port") + 1]
+                          for _, command in commands], ["31010", "31011"])
+        self.assertEqual(set(ports), {30010, 30011, 31010, 31011})
+        args.base_nccl_port = 30011
         with self.assertRaises(smoke.batch.BatchError):
             smoke.server_commands(args)
 

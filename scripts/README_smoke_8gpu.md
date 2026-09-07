@@ -13,7 +13,10 @@ bash infer_smoke_8gpu.sh \
 
 默认 GPU 分组 `0,1,2,3` 和 `4,5,6,7`，每组沿用已跑通的
 `--num-gpus 4 --tp-size 2 --ulysses-degree 2 --performance-mode speed`。
-HTTP 端口为 `30010/30011`，NCCL 端口为 `31010/31011`。
+HTTP 端口为 `30010/30011`，通信端口沿用当前 SGLang 版本自身的配置。
+默认不传入 `--nccl-port`，以兼容不提供该命令行参数的 SGLang 版本。
+如果已确认当前版本支持该参数，可以显式使用 `--base-nccl-port 31010`，
+为两个副本分别传入 `31010/31011`，并启用对应端口的占用检查。
 各组内部做模型并行，两组之间处理不同视频。两份 CSV 共用任务队列，
 谁先完成谁领取下一条；不会给慢副本固定分配一半数据。
 每个副本默认仅一个在途请求，总计两个，避免把 HTTP 排队误当成 GPU 并行。
@@ -33,7 +36,7 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 sglang serve \
   --model-path /srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3 \
   --num-gpus 4 --tp-size 2 --ulysses-degree 2 \
   --performance-mode speed --host 127.0.0.1 \
-  --port 30011 --nccl-port 31011 --model-variant fl2va
+  --port 30011 --model-variant fl2va
 
 # 在另一个终端连接两组服务；该模式不会启动或停止它们
 bash infer_smoke_8gpu.sh \

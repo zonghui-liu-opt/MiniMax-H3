@@ -42,7 +42,8 @@ def build_parser():
     parser.add_argument("--tp-size", type=int, default=2)
     parser.add_argument("--ulysses-degree", type=int, default=2)
     parser.add_argument("--base-port", type=int, default=30010)
-    parser.add_argument("--base-nccl-port", type=int, default=31010)
+    parser.add_argument("--base-nccl-port", type=int,
+                        help="可选：仅当所用 SGLang 支持 --nccl-port 时设置；默认沿用服务自身的通信端口配置")
     parser.add_argument("--startup-timeout", type=float, default=1800)
     parser.add_argument("--server-arg", action="append", default=[],
                         help="附加 serve 参数，每个 token 用 --server-arg=TOKEN 传入")
@@ -76,14 +77,21 @@ def server_commands(args):
         seen.update(ids)
         if len(ids) != args.tp_size * args.ulysses_degree:
             raise batch.BatchError(f"GPU 组 {group} 的卡数必须等于 TP × Ulysses")
-        port, nccl = args.base_port + index, args.base_nccl_port + index
-        ports.extend([port, nccl])
+        port = args.base_port + index
+        ports.append(port)
+        communication_args = []
+        # The known-working deployment does not pass --nccl-port. Some
+        # SGLang diffusion releases do not expose it in their CLI at all.
+        if args.base_nccl_port is not None:
+            nccl = args.base_nccl_port + index
+            ports.append(nccl)
+            communication_args = ["--nccl-port", str(nccl)]
         commands.append((group, [
             "sglang", "serve", "--model-path", args.model_path,
             "--num-gpus", str(len(ids)), "--tp-size", str(args.tp_size),
             "--ulysses-degree", str(args.ulysses_degree),
             "--performance-mode", "speed", "--host", "127.0.0.1",
-            "--port", str(port), "--nccl-port", str(nccl),
+            "--port", str(port), *communication_args,
             "--model-variant", "fl2va", *args.server_arg,
         ]))
     if len(set(ports)) != len(ports) or any(not 1 <= p <= 65535 for p in ports):
