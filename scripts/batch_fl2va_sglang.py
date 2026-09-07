@@ -350,6 +350,7 @@ class SGLangClient:
         request_timeout: float,
         retries: int,
         retry_backoff: float,
+        stop_event: threading.Event | None = None,
     ) -> None:
         normalized = server_url.rstrip("/")
         if normalized.endswith("/v1"):
@@ -359,6 +360,13 @@ class SGLangClient:
         self.request_timeout = request_timeout
         self.retries = retries
         self.retry_backoff = retry_backoff
+        self.stop_event = stop_event
+
+    def pause(self, seconds: float = 0) -> None:
+        if self.stop_event is None:
+            time.sleep(seconds)
+        elif self.stop_event.wait(seconds):
+            raise BatchError("任务已中断；已提交的 video id 保留供下次恢复")
 
     def _headers(self, *, json_body: bool = False) -> dict[str, str]:
         headers = {"Accept": "application/json"}
@@ -381,6 +389,7 @@ class SGLangClient:
             data = json.dumps(json_body, ensure_ascii=False).encode("utf-8")
         attempts = self.retries + 1
         for attempt in range(attempts):
+            self.pause()
             request = urllib.request.Request(
                 url,
                 data=data,
@@ -392,7 +401,7 @@ class SGLangClient:
             except urllib.error.HTTPError as exc:
                 body = exc.read().decode("utf-8", "replace")
                 if exc.code in RETRYABLE_HTTP_CODES and attempt + 1 < attempts:
-                    time.sleep(self.retry_backoff * (2**attempt))
+                    self.pause(self.retry_backoff * (2**attempt))
                     continue
                 raise ApiError(
                     f"{method} {url} 返回 HTTP {exc.code}: {body[:1000]}",
@@ -401,7 +410,7 @@ class SGLangClient:
                 ) from exc
             except (urllib.error.URLError, TimeoutError, OSError) as exc:
                 if attempt + 1 < attempts:
-                    time.sleep(self.retry_backoff * (2**attempt))
+                    self.pause(self.retry_backoff * (2**attempt))
                     continue
                 raise ApiError(f"{method} {url} 请求失败: {exc}") from exc
         raise AssertionError("unreachable")
@@ -489,6 +498,7 @@ def state_payload(
     video_id: str | None = None,
     server_response: dict[str, Any] | None = None,
     error: str | None = None,
+    server_url: str | None = None,
 ) -> dict[str, Any]:
     value: dict[str, Any] = {
         "case_index": case.index,
@@ -507,6 +517,8 @@ def state_payload(
         value["server_response"] = server_response
     if error is not None:
         value["error"] = error
+    if server_url is not None:
+        value["server_url"] = server_url
     return value
 
 
@@ -534,6 +546,7 @@ def wait_for_terminal_status(
                     case,
                     paths,
                     status=status,
+                    server_url=client.server_url,
                     video_id=video_id,
                     server_response=response,
                 ),
@@ -545,7 +558,7 @@ def wait_for_terminal_status(
             raise BatchError(f"video {video_id} 生成失败: {extract_failure(response)}")
         if time.monotonic() >= deadline:
             raise BatchError(f"video {video_id} 等待超过 {job_timeout:g} 秒")
-        time.sleep(poll_interval)
+        client.pause(poll_interval)
 
 
 def run_case(
@@ -576,6 +589,9 @@ def run_case(
     )
 
     if video_id:
+        owner = previous.get("server_url")
+        if owner and owner != client.server_url:
+            raise BatchError(f"旧任务属于 {owner}，不能在 {client.server_url} 恢复")
         log(f"[{case.name}] 恢复 video id: {video_id}")
         try:
             terminal = wait_for_terminal_status(
@@ -597,6 +613,7 @@ def run_case(
                 case,
                 paths,
                 status="completed",
+                server_url=client.server_url,
                 video_id=video_id,
                 server_response=terminal,
             )
@@ -613,6 +630,7 @@ def run_case(
             case,
             paths,
             status=str(submitted.get("status") or "submitted").lower(),
+            server_url=client.server_url,
             video_id=video_id,
             server_response=submitted,
         ),
@@ -630,6 +648,7 @@ def run_case(
         case,
         paths,
         status="completed",
+        server_url=client.server_url,
         video_id=video_id,
         server_response=terminal,
     )
@@ -777,11 +796,14 @@ def run_batch(args: argparse.Namespace) -> int:
             return run_case(case, args, client)
         except Exception as exc:
             paths = case_paths(output_dir, case)
+            previous = read_json(paths.state) or {}
             failed = state_payload(
                 case,
                 paths,
                 status="failed",
-                video_id=(read_json(paths.state) or {}).get("video_id"),
+                server_url=previous.get("server_url", client.server_url),
+                video_id=previous.get("video_id"),
+                server_response=previous.get("server_response"),
                 error=str(exc),
             )
             atomic_write_json(paths.state, failed)
