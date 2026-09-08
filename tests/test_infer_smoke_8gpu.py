@@ -4,7 +4,10 @@ import contextlib
 import argparse
 import csv
 import json
+import os
+import signal
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -162,8 +165,69 @@ class SmokeTest(unittest.TestCase):
             self.fail("Could not allocate eight free test ports")
         return ["--metadata", str(self.metadata[0]), "--metadata-v1", str(self.metadata[1]),
                 "--output-dir", str(self.output), "--limit", "1", "--startup-timeout", "15",
+                "--start-servers",
                 "--base-port", str(base), "--base-master-port", str(base + 4),
                 "--base-scheduler-port", str(base + 6)]
+
+    def test_default_client_reports_unavailable_service_without_launching(self):
+        argv = self.launch_argv()
+        argv.remove("--start-servers")
+        with mock.patch.object(smoke.subprocess, "Popen",
+                               side_effect=AssertionError("client tried to launch SGLang")), \
+                mock.patch.object(smoke.os, "killpg",
+                                  side_effect=AssertionError("client tried to stop SGLang")), \
+                mock.patch.object(smoke.batch, "log") as log:
+            self.assertEqual(smoke.main(argv), 2)
+        self.assertIn("serve_smoke_8gpu.sh", log.call_args.args[0])
+
+    def test_service_survives_multiple_batches_and_stops_on_sigterm(self):
+        stub = self.write_server_stub()
+        executable = self.root / "sglang"
+        executable.write_text(f"#!{sys.executable}\n" + stub.read_text())
+        executable.chmod(0o755)
+        inference_argv = self.launch_argv()
+        inference_argv.remove("--start-servers")
+        service_dir = self.root / "services"
+        serve_argv = [*inference_argv, "--serve-only", "--service-dir", str(service_dir)]
+        # Service startup is independent of both the CSV and inference output lock.
+        serve_argv[serve_argv.index("--metadata") + 1] = str(self.root / "missing.csv")
+        console = self.root / "service-console.log"
+        with console.open("w") as output:
+            manager = subprocess.Popen(
+                [sys.executable, smoke.__file__, *serve_argv], stdout=output,
+                stderr=subprocess.STDOUT, env={**os.environ, "PATH": f"{self.root}{os.pathsep}{os.environ['PATH']}"},
+            )
+        try:
+            deadline = time.monotonic() + 20
+            while "全部服务就绪" not in console.read_text():
+                if manager.poll() is not None or time.monotonic() >= deadline:
+                    self.fail(f"service did not become ready: {console.read_text()}")
+                time.sleep(.05)
+            with mock.patch.object(smoke.subprocess, "Popen",
+                                   side_effect=AssertionError("client reloaded weights")), \
+                    mock.patch.object(smoke.os, "killpg",
+                                      side_effect=AssertionError("client stopped service")):
+                for extra in ([], ["--force"]):
+                    self.assertEqual(smoke.main([*inference_argv, *extra]), 0)
+                    summary = json.loads((self.output / "manifest.json").read_text())
+                    self.assertEqual(summary["generated"], 2)
+                    self.assertIsNone(manager.poll())
+                    args = smoke.build_parser().parse_args(inference_argv)
+                    for url in summary["server_urls"]:
+                        smoke.make_client(url, args, threading.Event(), probe=True).check_server()
+                # A failed batch must also leave both services available.
+                failed_argv = [*inference_argv, "--metadata", str(self.root / "missing.csv")]
+                self.assertEqual(smoke.main(failed_argv), 2)
+                self.assertIsNone(manager.poll())
+            self.assertEqual(len(list(service_dir.glob("logs/*/server_*.log"))), 2)
+            self.assertFalse((self.output / "logs").exists())
+            manager.send_signal(signal.SIGTERM)
+            self.assertEqual(manager.wait(timeout=20), 0)
+            smoke.check_ports_available(args, smoke.server_commands(args)[0])
+        finally:
+            if manager.poll() is None:
+                manager.terminate()
+                manager.wait(timeout=20)
 
     def test_two_replicas_balance_and_resume_completed(self):
         # Both first POSTs must be in flight together or the barrier fails.

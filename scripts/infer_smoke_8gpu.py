@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run smoke v3 with first-frame guidance on independent SGLang replicas."""
+"""Run smoke v3 against reusable SGLang replicas, or supervise those replicas."""
 
 from __future__ import annotations
 
@@ -35,8 +35,15 @@ def build_parser():
     )
     parser.add_argument("--metadata-v1", type=Path,
                         help="兼容旧入口：显式指定时才追加该 CSV；默认只推理 --metadata")
-    parser.add_argument("--server-urls", nargs="+",
-                        help="连接已有服务，不启动/停止服务；每个 URL 一个独立副本")
+    service_mode = parser.add_mutually_exclusive_group()
+    service_mode.add_argument("--server-urls", nargs="+",
+                             help="连接已有服务；默认连接本机 base-port 起的两个副本")
+    service_mode.add_argument("--serve-only", action="store_true",
+                             help="只启动并保持 SGLang 服务，不读取 CSV；Ctrl-C 停止服务")
+    service_mode.add_argument("--start-servers", action="store_true",
+                             help="旧的一体化模式：启动服务并推理，结束或中断后停止服务")
+    parser.add_argument("--service-dir", type=Path, default=ROOT / "results/sglang_services",
+                        help="常驻服务的日志与锁目录，独立于推理 output-dir")
     parser.add_argument("--model-path", default=os.environ.get(
         "MODEL_PATH", "/srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3"))
     parser.add_argument("--gpu-groups", nargs="+", default=["0,1,2,3", "4,5,6,7"],
@@ -58,7 +65,7 @@ def build_parser():
     parser.epilog = ("--max-concurrency 是每个服务的在途任务数，默认 1；"
                      "默认只读取 metadata_smoke_v3.csv，--limit 限制该 CSV 的条数。"
                      "仅显式传入 --metadata-v1 时追加第二份 CSV，--limit 对每份分别生效。"
-                     "自动启动的服务会在完成或中断时停止。")
+                     "默认复用已有服务，推理结束后服务保留；先用 serve_smoke_8gpu.sh 启动服务。")
     return parser
 
 
@@ -312,22 +319,29 @@ def run(args, stop_event):
     args.output_dir = args.output_dir.expanduser().resolve()
     if args.startup_timeout <= 0 or args.tp_size <= 0 or args.ulysses_degree <= 0:
         raise batch.BatchError("startup-timeout、tp-size 和 ulysses-degree 必须大于 0")
-    commands, _ = ([], []) if args.server_urls else server_commands(args)
-    http_ports = [replica_ports(args, i)["HTTP"] for i in range(len(commands))]
+    configured_commands, _ = ([], []) if args.server_urls else server_commands(args)
+    http_ports = [replica_ports(args, i)["HTTP"] for i in range(len(configured_commands))]
+    commands = configured_commands if args.serve_only or args.start_servers else []
     urls = args.server_urls or [f"http://127.0.0.1:{port}" for port in http_ports]
     clients = [make_client(url, args, stop_event) for url in urls]
     urls = [client.server_url for client in clients]
     if len(set(urls)) != len(urls):
         raise batch.BatchError("--server-urls 不能重复")
-    datasets, shared, pinned = prepare(args, urls)
-    batch.log(f"{sum(len(cases) for _, cases in datasets)} 个 case，{len(clients)} 个副本，"
-              f"每副本 {args.max_concurrency} 个在途请求；输出: {args.output_dir}")
+    if args.serve_only:
+        batch.log(f"服务模式：启动 {len(clients)} 个副本，不读取 CSV、不提交推理任务")
+    else:
+        datasets, shared, pinned = prepare(args, urls)
+        batch.log(f"{sum(len(cases) for _, cases in datasets)} 个 case，{len(clients)} 个副本，"
+                  f"每副本 {args.max_concurrency} 个在途请求；输出: {args.output_dir}")
+        if not commands:
+            batch.log(f"复用已有服务: {urls}；本次推理不会启动或停止 SGLang")
     for index, (group, command) in enumerate(commands):
         batch.log(f"副本 {index + 1} 端口: {replica_ports(args, index)}")
         batch.log(f"CUDA_VISIBLE_DEVICES={group} {shlex.join(command)}")
     if args.dry_run:
-        for options, _ in datasets:
-            batch.run_batch(options)
+        if not args.serve_only:
+            for options, _ in datasets:
+                batch.run_batch(options)
         return 0
 
     processes = []
@@ -338,7 +352,8 @@ def run(args, stop_event):
                 raise batch.BatchError("找不到 sglang；请在已跑通推理的 Python 环境执行")
             check_ports_available(args, commands)
             run_id = f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{time.time_ns()}"
-            log_dir = args.output_dir / "logs" / run_id
+            log_root = args.service_dir.expanduser().resolve() if args.serve_only else args.output_dir
+            log_dir = log_root / "logs" / run_id
             log_dir.mkdir(parents=True, exist_ok=True)
             for index, (group, command) in enumerate(commands):
                 log_path = log_dir / f"server_{http_ports[index]}.log"
@@ -378,7 +393,22 @@ def run(args, stop_event):
                     stop_event.wait(2)
         elif not args.skip_server_check:
             for client in clients:
-                client.check_server()
+                try:
+                    make_client(client.server_url, args, stop_event, probe=True).check_server()
+                except batch.ApiError as exc:
+                    raise batch.BatchError(
+                        f"服务不可用: {client.server_url}；请先运行 bash serve_smoke_8gpu.sh "
+                        "并等待服务就绪，或用 --server-urls 指定已有服务。"
+                        f"本次未启动模型。详情: {exc}") from exc
+        if args.serve_only:
+            batch.log(f"全部服务就绪: {urls}；可在另一终端运行 bash infer_smoke_8gpu.sh。"
+                      "服务持续运行；在本服务终端按 Ctrl-C 停止。")
+            while not stop_event.wait(.5):
+                for index, process in enumerate(processes):
+                    if process.poll() is not None:
+                        raise batch.BatchError(f"服务 {urls[index]} 已退出 ({process.returncode})；"
+                                               f"日志: {log_paths[index]}")
+            return 0
         return run_work(args, clients, datasets, shared, pinned, stop_event)
     except (batch.BatchError, OSError):
         print_server_log_tails(log_paths)
@@ -391,17 +421,21 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     stop_event = threading.Event()
     old_handlers = {}
-    for signum in (signal.SIGINT, signal.SIGTERM):
+    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         old_handlers[signum] = signal.signal(signum, lambda *_: stop_event.set())
     try:
         # An OS lock releases automatically on crash; stale lock files are safe.
         args.output_dir = args.output_dir.expanduser().resolve()
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        with (args.output_dir / ".inference.lock").open("a") as lock_file:
+        lock_dir = args.service_dir.expanduser().resolve() if args.serve_only else args.output_dir
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        lock_name = ".service.lock" if args.serve_only else ".inference.lock"
+        with (lock_dir / lock_name).open("a") as lock_file:
             try:
                 fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
-                raise batch.BatchError("已有推理进程正在写入该输出目录") from exc
+                message = ("已有服务管理进程使用该 service-dir" if args.serve_only
+                           else "已有推理进程正在写入该输出目录")
+                raise batch.BatchError(message) from exc
             return run(args, stop_event)
     except (batch.BatchError, OSError) as exc:
         batch.log(f"错误: {exc}")
