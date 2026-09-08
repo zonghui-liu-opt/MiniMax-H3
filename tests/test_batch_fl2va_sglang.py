@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -96,6 +97,21 @@ class BatchFl2VATest(unittest.TestCase):
         case = batch.load_cases(args)[0]
         request = batch.build_request(case, args)
         self.assertEqual([item["frame_index"] for item in request["conditions"]], [0])
+
+    def test_legacy_metadata_exposes_actual_names_and_csv_seed_source(self):
+        args = self.parse_args(
+            "--metadata", str(REPO_ROOT / "data_h3/metadata_smoke_v4_multiseed.csv"),
+            "--limit", "3", "--seed", "888")
+        cases = batch.load_cases(args)
+        self.assertEqual([case.name for case in cases],
+                         ["000_00_01_0", "001_00_02_1", "002_00_03_2"])
+        with mock.patch.object(batch, "log") as log:
+            batch.log_case_configuration(args, cases)
+        messages = "\n".join(call.args[0] for call in log.call_args_list)
+        self.assertIn(str(args.metadata.resolve()), messages)
+        self.assertIn("3 条读取 CSV 的 seed 列", messages)
+        self.assertIn("旧版纯编号输出名", messages)
+        self.assertIn("id=001, seed=1 -> 001_00_02_1.mp4", messages)
 
     def test_end_to_end_with_mock_server(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), MockVideoHandler)

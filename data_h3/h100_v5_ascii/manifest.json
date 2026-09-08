@@ -1,0 +1,43 @@
+{
+  "version": "smoke_v5_ascii",
+  "image_bytes_changed": false,
+  "prompt_changes": false,
+  "seed_rule": "Explicit CSV seeds 0, 10000, 20000 for each cat/motion pair",
+  "filename_rule": "{id}_{cat_id}_{motion_id}_seed-{seed}.mp4",
+  "images": [
+    {
+      "cat_idx": "00",
+      "source": "data_h3/cat_ids/00_短毛橘猫鱼骨纹.png",
+      "path": "cat_ids/00.png",
+      "sha256": "c2a809e3691d8ad4edce11fef6880ae9ba35906711577f3d7dfbc9896a800c85"
+    },
+    {
+      "cat_idx": "02",
+      "source": "data_h3/cat_ids/02_长毛橘猫.png",
+      "path": "cat_ids/02.png",
+      "sha256": "a408c9b6a14ce6b59929f02a5a44ae87db78a685be506d4cd0664ea9c26d5059"
+    },
+    {
+      "cat_idx": "38",
+      "source": "data_h3/cat_ids/38_彼得秃猫.png",
+      "path": "cat_ids/38.png",
+      "sha256": "900c31488fa07ee22dbe8d95598db3670ae9755b2cf7ec7f98cfb46e51aa0b2b"
+    }
+  ],
+  "metadata": [
+    {
+      "source": "data_h3/metadata_smoke_v5.csv",
+      "path": "metadata_smoke_v5.csv",
+      "rows": 42,
+      "source_sha256": "a259d6b6e8988744879e52e540fb76524d3e7b5f523d3934800eec731a2281e4",
+      "sha256": "ecdddc3d64e4a42711a760b315ce62140c6cf40456d1ad64f122fa0d50a4dc94"
+    },
+    {
+      "source": "data_h3/metadata_smoke_v5_multiseed.csv",
+      "path": "metadata_smoke_v5_multiseed.csv",
+      "rows": 126,
+      "source_sha256": "e503b8ce5107ef6c149bfa20a910134372621d1a15c3572219d3772616920ad2",
+      "sha256": "86fb40c72283ed1bad826a06179fac0db67bf7e16ffc33f6e6484f61b2deda43"
+    }
+  ]
+}

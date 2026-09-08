@@ -98,47 +98,57 @@ class SmokeTest(unittest.TestCase):
             self.metadata.append(path)
         self.output = self.root / "out"
 
-    def test_default_v3_first_frame_on_two_replicas_and_resume(self):
-        # ROOT contains only v3: accidentally loading v1/v2 must fail this run.
-        metadata = self.root / "data_h3/metadata_smoke_v3.csv"
+    def test_default_v5_multiseed_names_requests_and_resume(self):
+        # Only V5 exists: falling back to V3/V4 must fail before any submission.
+        metadata = self.root / "data_h3/metadata_smoke_v5_multiseed.csv"
         metadata.parent.mkdir()
+        rows = []
+        for motion in ("13-small-jump", "14-play-teaser-wand"):
+            for seed in (0, 10000, 20000):
+                rows.append(["../cat.png", f"v5: {motion}\nsecond line", "nonexistent-tail.png",
+                             seed, f"00-orange-shorthair_{motion}_seed-{seed}"])
+        filenames = {f"{i:03d}_{row[-1]}.mp4" for i, row in enumerate(rows)}
         with metadata.open("w", newline="") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["input_image", "prompt", "last_image"])
-            for i in range(4):
-                writer.writerow(["../cat.png", f"v3: prompt {i}\nsecond line",
-                                 "nonexistent-tail.png"])
+            writer.writerow(["input_image", "prompt", "last_image", "seed", "output_name"])
+            writer.writerows(rows)
         with mock.patch.object(smoke, "ROOT", self.root), \
                 servers(barrier=threading.Barrier(2)) as instances:
             argv = ["--server-urls", *[f"http://127.0.0.1:{s.server_port}" for s in instances],
-                    "--poll-interval", ".001"]
+                    "--poll-interval", ".001", "--seed", "888"]
             args = smoke.build_parser().parse_args(argv)
             self.assertEqual(args.metadata, metadata)
             self.assertIsNone(args.metadata_v1)
             self.assertTrue(args.single_frame)
-            self.assertEqual(args.output_dir, self.root / "results/smoke_v3_i2va")
+            self.assertEqual(args.output_dir, self.root / "results/v5_multiseed_smoke")
             self.assertEqual(smoke.main(argv), 0)
             self.assertTrue(all(s.submitted for s in instances))
             requests = [request for s in instances for request in s.submitted]
-            self.assertEqual(len(requests), 4)
-            self.assertEqual(sorted(r["seed"] for r in requests), list(range(4)))
+            self.assertEqual(len(requests), 6)
+            self.assertEqual(sorted(r["seed"] for r in requests), [0, 0, 10000, 10000, 20000, 20000])
+            self.assertEqual({(r["prompt"], r["seed"]) for r in requests},
+                             {(row[1], row[3]) for row in rows})
             for request in requests:
                 self.assertEqual(request["task"], "fl2va")
                 self.assertEqual([c["frame_index"] for c in request["conditions"]], [0])
                 self.assertEqual(request["conditions"][0]["role"], "keyframe")
                 self.assertTrue(request["conditions"][0]["uri"].startswith("data:image/png;base64,"))
                 self.assertEqual(request["target"]["duration_seconds"], 4.0)
-                self.assertEqual(request["prompt"], f"v3: prompt {request['seed']}\nsecond line")
             summary = json.loads((args.output_dir / "manifest.json").read_text())
-            self.assertEqual(summary["total"], 4)
-            self.assertEqual(summary["completed"], 4)
+            self.assertEqual(summary["total"], 6)
+            self.assertEqual(summary["completed"], 6)
             self.assertEqual(summary["manifests"],
-                             [str((args.output_dir / "metadata_smoke_v3/manifest.json").resolve())])
-            states = list((args.output_dir / "metadata_smoke_v3/states").glob("*.json"))
-            self.assertEqual(len(states), 4)
+                             [str((args.output_dir / "metadata_smoke_v5_multiseed/manifest.json").resolve())])
+            dataset_dir = args.output_dir / "metadata_smoke_v5_multiseed"
+            self.assertEqual({p.name for p in (dataset_dir / "videos").glob("*.mp4")}, filenames)
+            states = list((dataset_dir / "states").glob("*.json"))
+            self.assertEqual(len(states), 6)
             self.assertTrue(all(json.loads(p.read_text())["last_image"] is None for p in states))
+            for path in states:
+                state = json.loads(path.read_text())
+                self.assertTrue(state["name"].endswith(f"_seed-{state['seed']}"))
             self.assertEqual(smoke.main(argv), 0)
-            self.assertEqual(sum(len(s.submitted) for s in instances), 4)
+            self.assertEqual(sum(len(s.submitted) for s in instances), 6)
 
     def argv(self, instances, *extra):
         return ["--metadata", str(self.metadata[0]), "--metadata-v1", str(self.metadata[1]),

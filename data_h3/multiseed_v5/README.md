@@ -35,6 +35,8 @@ CSV 的 `output_name` 只包含后三段，既不包含前面的行号，也不�
 
 在内网仓库根目录运行，复用已经启动的 SGLang 服务：
 
+`infer_smoke_8gpu.sh` 的默认输入现已切换为本节的 V5 多 seed CSV；直接运行也会使用 126 条 V5 请求。显式传入 `--metadata` 时，以指定文件为准。
+
 ```bash
 bash infer_smoke_8gpu.sh \
   --metadata data_h3/metadata_smoke_v5_multiseed.csv \
@@ -45,6 +47,10 @@ bash infer_smoke_8gpu.sh \
 视频保存到 `results/v5_multiseed_smoke/metadata_smoke_v5_multiseed/videos/`。
 
 默认连接本机 30010 和 30012 两个服务。使用其他服务地址时，增加 `--server-urls` 并填写实际 URL。加 `--dry-run` 可只生成请求预览。这里仍是 4 秒首帧引导，不添加尾帧条件，也不自动裁剪视频。
+
+启动日志会打印实际 CSV 绝对路径、seed 来源、视频目录和前三个输出文件名。若仍看到 `000_00_01_0.mp4`，说明正在使用旧编号格式，或查看的是旧输出目录；核对日志中的实际路径。旧 V4 多 seed CSV 第一轮使用源行号作为 seed，因此会出现 seed 与 id 相等。
+
+内网需要数字图片文件名时，使用 [V5 ASCII 数据包](../h100_v5_ascii/README.md)，将 `--metadata` 改为 `data_h3/h100_v5_ascii/metadata_smoke_v5_multiseed.csv`。`h100_v4_ascii` 目录保留旧 V4 数据，不能通过运行新脚本自动变成 V5。
 
 ## 指定同一只猫、指定动作和多个 seed
 

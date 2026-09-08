@@ -255,6 +255,27 @@ def load_cases(args: argparse.Namespace) -> list[Case]:
     return cases
 
 
+def log_case_configuration(args: argparse.Namespace, cases: list[Case]) -> None:
+    """Expose the loaded CSV and actual seeds/names before submitting work."""
+    explicit = sum(bool(case.source_row.get(args.seed_column, "").strip())
+                   for case in cases)
+    seeds = sorted({case.seed for case in cases})
+    seed_preview = ", ".join(str(seed) for seed in seeds[:8])
+    if len(seeds) > 8:
+        seed_preview += f", ...（共 {len(seeds)} 个不同 seed）"
+    log(f"实际 metadata: {args.metadata.expanduser().resolve()}（{len(cases)} 条）")
+    log(f"seed 来源: {explicit} 条读取 CSV 的 {args.seed_column} 列；"
+        f"{len(cases) - explicit} 条使用 --seed + 行号 × --seed-stride；"
+        f"实际 seed: [{seed_preview}]")
+    log(f"视频目录: {args.output_dir.expanduser().resolve() / 'videos'}")
+    if any(re.fullmatch(r"\d+_\d+_\d+", case.source_row.get(args.output_name_column, ""))
+           for case in cases):
+        log("提示：当前 CSV 使用旧版纯编号输出名。需要 V5 可读名称和固定 seed 组时，"
+            "请指定 --metadata data_h3/metadata_smoke_v5_multiseed.csv。")
+    for case in cases[:3]:
+        log(f"输出预览: id={case.index:03d}, seed={case.seed} -> {case.name}.mp4")
+
+
 def image_to_uri(path: Path, *, use_file_uri: bool) -> str:
     if use_file_uri:
         return path.as_uri()
@@ -771,6 +792,7 @@ def validate_args(args: argparse.Namespace) -> None:
 def run_batch(args: argparse.Namespace) -> int:
     validate_args(args)
     cases = load_cases(args)
+    log_case_configuration(args, cases)
     output_dir = args.output_dir.expanduser().resolve()
 
     if args.dry_run:

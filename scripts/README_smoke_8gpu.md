@@ -1,9 +1,9 @@
-# smoke v3 首帧引导的 8 × H100 并行推理
+# Smoke V5 多 seed 首帧引导的 8 × H100 并行推理
 
 从仓库根目录执行；使用已经跑通 `infer.sh` 的 SGLang 环境，无需安装新依赖。
 沿用 `launch_minimax_h3_sglang.sh` / `infer.sh` 的分工：先启动服务加载权重，
 再按需多次运行推理客户端。8 卡版本使用下面两个入口。
-默认仅处理 `data_h3/metadata_smoke_v3.csv` 的 36 条数据，以每行的 `input_image`
+默认处理 `data_h3/metadata_smoke_v5_multiseed.csv` 的 126 条数据（3 只猫 × 14 个动作 × 3 个 seed），以每行的 `input_image`
 作为唯一首帧条件，prompt 按 CSV 原文发送。图片相对路径以 CSV 所在目录解析。
 
 ```bash
@@ -11,15 +11,15 @@
 bash serve_smoke_8gpu.sh \
   --model-path /srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3
 
-# 看到“全部服务就绪”后，在终端 B 推理 v3；结束后服务继续保留
+# 看到“全部服务就绪”后，在终端 B 推理 V5；结束后服务继续保留
 bash infer_smoke_8gpu.sh
 
 # 下一批直接复用已加载的权重；修改提示词后使用新的输出目录
-bash infer_smoke_8gpu.sh --output-dir results/smoke_v3_i2va_run2
+bash infer_smoke_8gpu.sh --output-dir results/v5_multiseed_smoke_run2
 
 # 不需要 GPU 的配置检查
 bash serve_smoke_8gpu.sh --dry-run   # 仅打印服务启动命令，不读取 CSV
-bash infer_smoke_8gpu.sh --dry-run   # 校验 v3 的 36 条输入并生成请求预览
+bash infer_smoke_8gpu.sh --dry-run   # 校验 V5 的 126 条输入并生成请求预览
 ```
 
 `serve_smoke_8gpu.sh` 在前台管理服务，适合放在 tmux 会话中：
@@ -61,7 +61,7 @@ SGLang Diffusion 的两个副本如果都使用默认 `master_port=30005`，可�
 发生 `EADDRINUSE`；仅分开 HTTP 端口不能隔离分布式初始化。
 本入口不传入 `--nccl-port`。旧参数 `--base-nccl-port` 作为 `--base-master-port` 的兼容别名，
 实际始终传入 Diffusion 使用的 `--master-port`。
-各组内部做模型并行，两组之间处理不同视频。v3 的全部任务共用一个队列，
+各组内部做模型并行，两组之间处理不同视频。V5 的全部任务共用一个队列，
 谁先完成谁领取下一条；不会给慢副本固定分配一半数据。
 每个副本默认仅一个在途请求，总计两个，避免把 HTTP 排队误当成 GPU 并行。
 
@@ -105,22 +105,24 @@ bash infer_smoke_8gpu.sh \
 客户端参数不会修改已有服务的配置。更换权重或 GPU 拓扑时需要重启服务。
 自定义端口后，在推理端用 `--server-urls` 指向对应地址，或传相同的 `--base-port`。
 
-继承原客户端的采样参数：50 步、768 短边、4 秒、seed 从 0 按行递增。
-v3 提示词为四秒视频，与默认时长一致；文件名带原始行索引。
-默认输出改为 `results/smoke_v3_i2va`，避免复用旧版首尾帧结果。
+采样参数为 50 步、768 短边、4 秒。V5 每个猫咪/动作组合使用显式 seed `0、10000、20000`，
+seed 读取 CSV 的 `seed` 列，与行号无关。文件名包含行号、可读猫名、动作名和实际 seed。
+只有显式选择缺少 seed 列的旧 CSV 时，才回退到 `--seed + 行号 × --seed-stride`。
+默认输出改为 `results/v5_multiseed_smoke`，避免复用旧版首尾帧结果。
 参数会写入请求预览。修改 prompt、时长、首尾帧模式或采样设置后应使用新输出目录，
 因为断点逻辑沿用原客户端的文件名匹配，不会自动判断配置是否变化。
 
 ```bash
-# 小规模检查：仅 v3 前 2 条，共 2 条
-bash infer_smoke_8gpu.sh --limit 2 --output-dir results/smoke_v3_i2va_check
+# 小规模检查：V5 第一个猫咪/动作的 3 个 seed
+bash infer_smoke_8gpu.sh --limit 3 --output-dir results/v5_multiseed_smoke_check
 
 # 在默认并发 1 跑通后，对比每副本 2 个在途请求是否能提高实际吞吐
-bash infer_smoke_8gpu.sh --max-concurrency 2 --output-dir results/smoke_v3_i2va_c2
+bash infer_smoke_8gpu.sh --max-concurrency 2 --output-dir results/v5_multiseed_smoke_c2
 ```
 
-`--metadata` 可替换默认 CSV；默认不会读取 v1/v2，也不会读取
-`metadata_smoke_v3_i2va.csv` 或 `metadata_smoke_v3_fl2va.csv`。
+`--metadata` 可显式替换默认 CSV；传入旧 V3/V4 文件时仍会按该文件执行，不会自动迁移内容。
+客户端在提交前打印实际 CSV 绝对路径、seed 来源、视频目录和前三个输出文件名；
+检测到旧 V4 纯编号命名时会提示改用 V5。
 `--single-frame` 已默认开启，无需额外传入。
 保留旧模式的显式入口：`--first-last-frame` 启用首尾帧引导，
 `--metadata-v1` 仅在显式提供时追加第二份 CSV。
@@ -143,9 +145,9 @@ bash infer_smoke_8gpu.sh --first-last-frame \
 ## 输出与恢复
 
 ```text
-results/smoke_v3_i2va/
+results/v5_multiseed_smoke/
   manifest.json                  # 总量、耗时、新提交并完成的吞吐（不含模型启动）
-  metadata_smoke_v3/              # 使用 CSV 文件名（不含扩展名）作为子目录
+  metadata_smoke_v5_multiseed/              # 使用 CSV 文件名（不含扩展名）作为子目录
     manifest.json
     videos/*.mp4
     states/*.json
@@ -179,7 +181,7 @@ results/sglang_services/          # 服务入口的 --service-dir，可单独设
 本地验证：`python3 -m unittest discover -s tests -v`。
 回归测试用真实子进程绑定 HTTP、HTTP+1 Broker、master、scheduler 四类端口，
 覆盖旧布局冲突、全部八个端口的占用预检、端口越界、双副本提交和恢复、
-启动失败/超时诊断与进程清理，以及默认只读取 v3、双副本仅发送首帧条件、
+启动失败/超时诊断与进程清理，以及默认只读取 V5、多 seed 与可读视频文件名、双副本仅发送首帧条件、
 忽略尾帧列、下载和恢复、显式首尾帧兼容模式；还覆盖默认客户端不加载权重、
 独立服务在连续两批推理后保持运行、批次出错不停止服务、SIGTERM 清理服务端口。
 测试不需要安装 SGLang 或访问 GPU。

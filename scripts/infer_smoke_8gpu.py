@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run smoke v3 against reusable SGLang replicas, or supervise those replicas."""
+"""Run smoke V5 multi-seed cases against reusable SGLang replicas."""
 
 from __future__ import annotations
 
@@ -27,10 +27,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def build_parser():
     parser = batch.build_parser()
-    parser.description = "8 张 H100：两个 4 卡 SGLang 副本，默认仅对 smoke v3 进行首帧引导推理"
+    parser.description = "8 张 H100：两个 4 卡 SGLang 副本，默认对 Smoke V5 进行首帧引导多 seed 推理"
     parser.set_defaults(
-        metadata=ROOT / "data_h3/metadata_smoke_v3.csv",
-        output_dir=ROOT / "results/smoke_v3_i2va",
+        metadata=ROOT / "data_h3/metadata_smoke_v5_multiseed.csv",
+        output_dir=ROOT / "results/v5_multiseed_smoke",
         single_frame=True,
     )
     parser.add_argument("--metadata-v1", type=Path,
@@ -63,7 +63,7 @@ def build_parser():
     parser.add_argument("--retry-failed", action="store_true",
                         help="重提服务端明确失败的任务；不重提仍在运行或仅 HTTP 失败的任务")
     parser.epilog = ("--max-concurrency 是每个服务的在途任务数，默认 1；"
-                     "默认只读取 metadata_smoke_v3.csv，--limit 限制该 CSV 的条数。"
+                     "默认只读取 metadata_smoke_v5_multiseed.csv（126 条），--limit 限制该 CSV 的条数。"
                      "仅显式传入 --metadata-v1 时追加第二份 CSV，--limit 对每份分别生效。"
                      "默认复用已有服务，推理结束后服务保留；先用 serve_smoke_8gpu.sh 启动服务。")
     return parser
@@ -187,6 +187,8 @@ def prepare(args, urls):
         options.metadata = metadata
         options.output_dir = args.output_dir / metadata.stem
         cases = batch.load_cases(options)
+        if not args.dry_run:
+            batch.log_case_configuration(options, cases)
         datasets.append((options, cases))
         for case in cases:
             paths = batch.case_paths(options.output_dir, case)

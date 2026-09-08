@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "images_match_originals": true,
+  "prompts_and_seeds_match_v5": true,
+  "default_entry_is_v5_multiseed": true,
+  "dry_run_checks": [
+    {
+      "metadata": "data_h3/metadata_smoke_v5_multiseed.csv",
+      "verified_requests": 126,
+      "first_names": [
+        "000_00-orange-shorthair-mackerel-tabby_01-idle-blink_seed-0.mp4",
+        "001_00-orange-shorthair-mackerel-tabby_01-idle-blink_seed-10000.mp4",
+        "002_00-orange-shorthair-mackerel-tabby_01-idle-blink_seed-20000.mp4"
+      ]
+    },
+    {
+      "metadata": "data_h3/h100_v5_ascii/metadata_smoke_v5_multiseed.csv",
+      "verified_requests": 126,
+      "first_names": [
+        "000_00-orange-shorthair-mackerel-tabby_01-idle-blink_seed-0.mp4",
+        "001_00-orange-shorthair-mackerel-tabby_01-idle-blink_seed-10000.mp4",
+        "002_00-orange-shorthair-mackerel-tabby_01-idle-blink_seed-20000.mp4"
+      ]
+    }
+  ],
+  "regression_tests": {
+    "total": 28,
+    "passed": 28,
+    "includes_mock_download_names_and_resume": true
+  },
+  "real_gpu_inference": "not_run"
+}
