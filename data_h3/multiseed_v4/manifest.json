@@ -1,0 +1,101 @@
+{
+  "source_prompt_version": "V4",
+  "prompt_changes": false,
+  "seed_offsets": [
+    0,
+    10000,
+    20000
+  ],
+  "seed_rule": "seed = zero-based row index in the corresponding source V4 CSV + seed_offset",
+  "id_rule": "zero-based row index in the generated CSV, padded to at least 3 digits",
+  "cat_id_rule": "two-digit prefix of the input image filename",
+  "motion_id_rule": "01-12 in the established action order",
+  "filename_rule": "{id}_{cat_id}_{motion_id}_{seed}.mp4",
+  "output_name_column_rule": "{cat_id}_{motion_id}_{seed}; the existing client prepends its row index and appends .mp4",
+  "inference_args": [
+    "--single-frame",
+    "--duration-seconds",
+    "4"
+  ],
+  "generation_status": "metadata_prepared_no_model_inference",
+  "actions": [
+    {
+      "motion_id": "01",
+      "description_zh": "自然呼吸＋自然眨眼"
+    },
+    {
+      "motion_id": "02",
+      "description_zh": "左耳轻拽回弹"
+    },
+    {
+      "motion_id": "03",
+      "description_zh": "右耳轻拽回弹"
+    },
+    {
+      "motion_id": "04",
+      "description_zh": "右前爪拨毛线球（画面左→右）"
+    },
+    {
+      "motion_id": "05",
+      "description_zh": "左前爪拨毛线球（画面右→左）"
+    },
+    {
+      "motion_id": "06",
+      "description_zh": "向左打滚、露腹挥爪"
+    },
+    {
+      "motion_id": "07",
+      "description_zh": "向右打滚、露腹挥爪"
+    },
+    {
+      "motion_id": "08",
+      "description_zh": "舔左前爪"
+    },
+    {
+      "motion_id": "09",
+      "description_zh": "舔右前爪"
+    },
+    {
+      "motion_id": "10",
+      "description_zh": "吃一口猫粮"
+    },
+    {
+      "motion_id": "11",
+      "description_zh": "向左收身蜷卧入睡"
+    },
+    {
+      "motion_id": "12",
+      "description_zh": "向右收身蜷卧入睡"
+    }
+  ],
+  "datasets": [
+    {
+      "source_csv": "data_h3/metadata_smoke_v4.csv",
+      "output_csv": "data_h3/metadata_smoke_v4_multiseed.csv",
+      "source_sha256": "ac15210cc5fb538e6548b2c9e5f45db8237fe1d4a07f9caeb454481742a7992f",
+      "output_sha256": "cdd9106cd7fb913079694c44d474c5e4daf7329179b5267e9ca84e29183b4163",
+      "source_rows": 36,
+      "generated_rows": 108,
+      "example_filenames": [
+        "000_00_01_0.mp4",
+        "036_00_01_10000.mp4",
+        "072_00_01_20000.mp4",
+        "107_38_12_20035.mp4"
+      ]
+    },
+    {
+      "source_csv": "data_h3/metadata_v4.csv",
+      "output_csv": "data_h3/metadata_v4_multiseed.csv",
+      "source_sha256": "3d0855d62121be9faeade409cbda858f2f1f0893d44f0f6dde8016897134c963",
+      "output_sha256": "4cfcb88681915f5d35bed651e9892fe645deae5fe9d9bd4318d5b7b1bd44f7f6",
+      "source_rows": 960,
+      "generated_rows": 2880,
+      "example_filenames": [
+        "000_00_01_0.mp4",
+        "960_00_01_10000.mp4",
+        "1920_00_01_20000.mp4",
+        "2879_79_12_20959.mp4"
+      ]
+    }
+  ]
+}

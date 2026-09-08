@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "checks": [
+    "V4 source prompt/image unchanged",
+    "three explicit seeds per cat/action",
+    "unique id_cat-id_motion-id_seed filename for every case",
+    "filename seed equals actual request seed",
+    "4-second request with only first-frame condition",
+    "real 8-GPU client dry-run for every row"
+  ],
+  "datasets": [
+    {
+      "metadata": "data_h3/metadata_smoke_v4_multiseed.csv",
+      "verified_cases": 108,
+      "request_previews": "results/v4_multiseed_preview/smoke/metadata_smoke_v4_multiseed/requests"
+    },
+    {
+      "metadata": "data_h3/metadata_v4_multiseed.csv",
+      "verified_cases": 2880,
+      "request_previews": "results/v4_multiseed_preview/full/metadata_v4_multiseed/requests"
+    }
+  ],
+  "model_inference_run": false
+}

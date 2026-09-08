@@ -1,0 +1,35 @@
+{
+  "status": "passed",
+  "base_rows": 42,
+  "expanded_rows": 126,
+  "cat_count": 3,
+  "motion_count": 14,
+  "seeds_per_cat_motion": [
+    0,
+    10000,
+    20000
+  ],
+  "same_image_and_prompt_across_seeds": true,
+  "readable_unique_filenames": 126,
+  "filename_parts": [
+    "id",
+    "cat-id",
+    "motion-id",
+    "seed-id"
+  ],
+  "actual_request_previews_verified": 126,
+  "single_frame_only": true,
+  "duration_seconds": 4,
+  "original_v4_and_testset_unchanged": true,
+  "approved_prompts_unchanged": true,
+  "tests": {
+    "prepare_multiseed_metadata": {
+      "passed": 4
+    },
+    "batch_fl2va_sglang": {
+      "passed": 3
+    }
+  },
+  "inference_status": "not_run",
+  "request_preview_directory": "results/v5_multiseed_preview/metadata_smoke_v5_multiseed/requests"
+}

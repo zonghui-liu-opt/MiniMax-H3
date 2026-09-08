@@ -1,0 +1,57 @@
+{
+  "version": "v4_additions_review_v1",
+  "status": "pending_user_review",
+  "inference_status": "not_run",
+  "mode": "I2VA",
+  "duration_seconds": 4,
+  "official_skill": ".agents/skills/h3-prompt-writing/SKILL.md",
+  "official_guide": ".agents/skills/h3-prompt-writing/references/base-en.txt",
+  "source_sha256": {
+    "data_h3/metadata_v4.csv": "3d0855d62121be9faeade409cbda858f2f1f0893d44f0f6dde8016897134c963",
+    "data_h3/metadata_smoke_v4.csv": "ac15210cc5fb538e6548b2c9e5f45db8237fe1d4a07f9caeb454481742a7992f",
+    "testsets/metadata_6cases_480x832.csv": "e59a14deb87ee3dc34236ddce30ad9478f0082d5a5cf35cc89b15cedd16bd94e"
+  },
+  "confirmed_scope": "Apply both new actions to all 80 V4 images; include existing smoke sample after prompt approval.",
+  "full": {
+    "target": "data_h3/metadata_v4.csv",
+    "rows_before": 960,
+    "append_rows": 160,
+    "rows_after_approval": 1120
+  },
+  "smoke": {
+    "target": "data_h3/metadata_smoke_v4.csv",
+    "rows_before": 36,
+    "append_rows": 6,
+    "rows_after_approval": 42,
+    "images": [
+      "cat_ids/00_短毛橘猫鱼骨纹.png",
+      "cat_ids/02_长毛橘猫.png",
+      "cat_ids/38_彼得秃猫.png"
+    ],
+    "review_candidate": "data_h3/metadata_smoke_v4_additions_review_v1.csv"
+  },
+  "image_path_base": "data_h3",
+  "append_order": "Original rows stay in their existing order, followed by each image in existing first-appearance order, with jump then teaser-wand play.",
+  "actions": [
+    {
+      "id": "catloop_small_jump",
+      "name_zh": "小幅跳跃",
+      "number": 13,
+      "source_rows_1_based": [
+        2,
+        4
+      ],
+      "status": "pending_user_review_and_inference_validation"
+    },
+    {
+      "id": "catloop_play_teaser_wand",
+      "name_zh": "玩逗猫棒",
+      "number": 14,
+      "source_rows_1_based": [
+        5,
+        6
+      ],
+      "status": "pending_user_review_and_inference_validation"
+    }
+  ]
+}

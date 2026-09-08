@@ -1,0 +1,137 @@
+{
+  "version": "smoke_v5",
+  "prompt_review": "user_approved_for_smoke_v5",
+  "inference_status": "not_run",
+  "base_metadata": "data_h3/metadata_smoke_v5.csv",
+  "base_rows": 42,
+  "multiseed_metadata": "data_h3/metadata_smoke_v5_multiseed.csv",
+  "seeds": [
+    0,
+    10000,
+    20000
+  ],
+  "seed_rule": "Every cat/motion pair uses the same explicit seeds: 0, 10000, 20000; no row-index offset.",
+  "expanded_rows": 126,
+  "row_order": "Base: cat then motion 01-14. Expanded: each cat/motion pair followed by its seeds in argument order.",
+  "filename_rule": "{id}_{cat_id}_{motion_id}_seed-{seed}.mp4",
+  "id_rule": "Zero-based row index in the generated CSV, padded to at least three digits; added by the existing inference client.",
+  "source_id_rule": "Zero-based row index in the base V5 CSV, retained for tracing filtered/expanded rows.",
+  "output_name_rule": "{cat_id}_{motion_id}_seed-{seed}; excludes id prefix and .mp4 extension.",
+  "inference_args": [
+    "--single-frame",
+    "--duration-seconds",
+    "4"
+  ],
+  "cats": [
+    {
+      "cat_idx": "00",
+      "cat_id": "00-orange-shorthair-mackerel-tabby",
+      "name_zh": "短毛橘猫鱼骨纹"
+    },
+    {
+      "cat_idx": "02",
+      "cat_id": "02-orange-longhair",
+      "name_zh": "长毛橘猫"
+    },
+    {
+      "cat_idx": "38",
+      "cat_id": "38-peterbald",
+      "name_zh": "彼得秃猫"
+    }
+  ],
+  "motions": [
+    {
+      "motion_idx": "01",
+      "motion_id": "01-idle-blink",
+      "name_zh": "自然呼吸与眨眼"
+    },
+    {
+      "motion_idx": "02",
+      "motion_id": "02-left-ear-tug",
+      "name_zh": "左耳轻拽回弹"
+    },
+    {
+      "motion_idx": "03",
+      "motion_id": "03-right-ear-tug",
+      "name_zh": "右耳轻拽回弹"
+    },
+    {
+      "motion_idx": "04",
+      "motion_id": "04-right-paw-yarn-left-to-right",
+      "name_zh": "右前爪拨球-画面左到右"
+    },
+    {
+      "motion_idx": "05",
+      "motion_id": "05-left-paw-yarn-right-to-left",
+      "name_zh": "左前爪拨球-画面右到左"
+    },
+    {
+      "motion_idx": "06",
+      "motion_id": "06-roll-left-belly-up-swat",
+      "name_zh": "向左打滚露腹挥爪"
+    },
+    {
+      "motion_idx": "07",
+      "motion_id": "07-roll-right-belly-up-swat",
+      "name_zh": "向右打滚露腹挥爪"
+    },
+    {
+      "motion_idx": "08",
+      "motion_id": "08-lick-left-paw",
+      "name_zh": "舔左前爪"
+    },
+    {
+      "motion_idx": "09",
+      "motion_id": "09-lick-right-paw",
+      "name_zh": "舔右前爪"
+    },
+    {
+      "motion_idx": "10",
+      "motion_id": "10-eat-cat-food",
+      "name_zh": "吃猫粮"
+    },
+    {
+      "motion_idx": "11",
+      "motion_id": "11-curl-left-sleep",
+      "name_zh": "向左蜷卧入睡"
+    },
+    {
+      "motion_idx": "12",
+      "motion_id": "12-curl-right-sleep",
+      "name_zh": "向右蜷卧入睡"
+    },
+    {
+      "motion_idx": "13",
+      "motion_id": "13-small-jump",
+      "name_zh": "小幅跳跃"
+    },
+    {
+      "motion_idx": "14",
+      "motion_id": "14-play-teaser-wand",
+      "name_zh": "玩逗猫棒"
+    }
+  ],
+  "preserved_source_sha256": {
+    "data_h3/metadata_v4.csv": "3d0855d62121be9faeade409cbda858f2f1f0893d44f0f6dde8016897134c963",
+    "data_h3/metadata_smoke_v4.csv": "ac15210cc5fb538e6548b2c9e5f45db8237fe1d4a07f9caeb454481742a7992f",
+    "testsets/metadata_6cases_480x832.csv": "e59a14deb87ee3dc34236ddce30ad9478f0082d5a5cf35cc89b15cedd16bd94e"
+  },
+  "approved_prompt_sha256": {
+    "data_h3/captions/v4_additions_review_v1/13_catloop_small_jump.en.txt": "e8612ab7cb957156f815c9dfa6e003ca319ea75f90c2243a73374755b9e12d11",
+    "data_h3/captions/v4_additions_review_v1/14_catloop_play_teaser_wand.en.txt": "9122cd120365575f1ad501ac25d5de6bc6949829b9d5e3dde20107ccc9a75e9b"
+  },
+  "latest_scope": "Create Smoke V5 first; the all-80-cat additions remain prepared for later application.",
+  "generated_sha256": {
+    "data_h3/metadata_smoke_v5.csv": "a259d6b6e8988744879e52e540fb76524d3e7b5f523d3934800eec731a2281e4",
+    "data_h3/metadata_smoke_v5_multiseed.csv": "e503b8ce5107ef6c149bfa20a910134372621d1a15c3572219d3772616920ad2",
+    "scripts/prepare_multiseed_metadata.py": "7ac712424634b47f2979b7a3ceb271acd59003db6f9fd35424713274df72dc37"
+  },
+  "example_filenames": [
+    "036_00-orange-shorthair-mackerel-tabby_13-small-jump_seed-0.mp4",
+    "037_00-orange-shorthair-mackerel-tabby_13-small-jump_seed-10000.mp4",
+    "038_00-orange-shorthair-mackerel-tabby_13-small-jump_seed-20000.mp4",
+    "039_00-orange-shorthair-mackerel-tabby_14-play-teaser-wand_seed-0.mp4",
+    "078_02-orange-longhair_13-small-jump_seed-0.mp4",
+    "120_38-peterbald_13-small-jump_seed-0.mp4"
+  ]
+}

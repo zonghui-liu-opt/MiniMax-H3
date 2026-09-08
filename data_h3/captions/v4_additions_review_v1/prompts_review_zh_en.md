@@ -1,0 +1,81 @@
+# V4 新增动作：中英文审核稿 v1
+
+状态：**待用户审核，待推理验证**。本轮未修改正式 metadata_v4.csv、metadata_smoke_v4.csv 或原始 6cases CSV。
+
+依据：项目内官方 [h3-prompt-writing skill](../../../.agents/skills/h3-prompt-writing/SKILL.md) 与 [base-en.txt](../../../.agents/skills/h3-prompt-writing/references/base-en.txt) 的 I2VA 格式，以及 V4 现有 12 条动作模板。实际输入仅有首帧图片，因此使用首帧指令和三个官方字段；英文用于模型输入，中文用于逐项审核。
+
+## 更新范围
+
+| 目标 | 原有行数 | 审核通过后追加 | 追加后行数 |
+| --- | ---: | ---: | ---: |
+| metadata_v4.csv | 960 | 80 张猫图 × 2 动作 = 160 | 1120 |
+| metadata_smoke_v4.csv | 36 | 原有 3 张猫图 × 2 动作 = 6 | 42 |
+
+Smoke 沿用短毛橘猫、长毛橘猫和彼得秃猫，新增英文与全量 V4 候选逐字一致。两份正式 CSV 均在用户确认提示词后再追加。
+
+[Smoke 测试候选 CSV（42 行）](../../metadata_smoke_v4_additions_review_v1.csv) 已包含原有 36 行和新增 6 行。该候选文件与正式 smoke 文件同在 data_h3 目录，保留原有 input_image 相对路径；内网测试时与原 smoke 使用相同的数据根目录和推理参数，仅替换 metadata 文件名。候选中的新提示词尚无推理结果。
+
+## 动作设计要点
+
+- 两个动作都延续 V4 的 4 秒单镜头：约 2.70 秒完成主体动作，3.00–4.00 秒维持自然收尾。猫咪身份、构图和场景来自实际首帧，可复用于不同品种、毛发类型和尾部结构。
+- **跳跃 / Small hop**：蓄力蹲下 → 后腿蹬地 → 短暂四爪离地 → 前爪先落、后爪紧随并缓冲 → 回到起始位置附近的直立坐姿。跳跃幅度低，向前位移不超过一只前爪长度，以适应原测试图的有限留白。保留画外逗引，具体化为一次轻微咂舌声。
+- **玩逗猫棒 / Teaser-wand play**：一根末端直接连接羽毛的逗猫棒从画面右侧进入 → 猫咪自身左前爪轻拍并落回 → 自身右前爪轻拍并落回 → 玩具暂停、从右侧退出 → 猫咪保持坐姿、略看向玩具离开的方向。玩具运动位于下巴以下，持棒者及手留在画外。
+- 跳跃对应原测试集第 2、4 条数据；逗猫棒对应第 5、6 条数据。原文另存于 source_4cases_original.csv，原测试集不变。
+
+## 13. 小幅跳跃 / catloop_small_jump
+
+英文原始文件：[13_catloop_small_jump.en.txt](13_catloop_small_jump.en.txt)
+
+### 中文审核全文
+
+对于目标视频，在目标视频的 0.00 秒处，完整参考 <Picture 1>（属于 [Shot 1]）。
+
+integrated_multimodal_description: [Shot 1] 真人实拍、照片级真实感的摄影棚宠物影像。固定机位的中景全身镜头，从 <Picture 1> 中猫咪的坐姿和场景开始。这是一个连续的四秒镜头。猫咪完成一次向前上方的小跳跃，轻柔落地，然后恢复舒适的直立坐姿。0.00–0.30 秒，猫咪保持首帧坐姿。0.30 秒时，画外传来一次轻微的咂舌声，吸引它看向镜头略上方。0.30–0.85 秒，猫咪胸部略微前倾，臀部从坐姿抬起，后腿屈曲形成紧凑的蓄力蹲姿，两只前爪仍接触地面。0.85–1.10 秒，后腿伸展蹬地，两只前爪同时抬起并向前伸出一小段距离。1.10–1.35 秒，身体沿一条低矮、紧凑的弧线跃起，短暂出现四只爪子同时清晰离开地面的状态。头部和胸部保持足够低的位置，以保留画面上方的留白；爪子位于身体下方或略靠前的位置。1.35–1.65 秒，前爪先接触地面，后爪紧随其后落地；肘部和后腿弯曲，缓冲落地。落地点相对起始位置向前移动不超过一只前爪的长度。影子始终留在地面上，腾空时与爪子清晰分离，落地时重新与爪子衔接。1.65–2.50 秒，猫咪放低臀部，前爪在肩膀下方做小幅落点调整，抬起胸部，在起始位置附近恢复面向镜头的直立坐姿。到 2.70 秒时，它已舒适地坐稳，两只前爪着地，目光放松而专注。这一坐姿持续到 3.00 秒。3.00–4.00 秒，猫咪保持 2.70 秒时已经形成的姿态，只保留轻微呼吸和细小的稳定动作。随姿态变化，保留同一只猫的面部比例、每一只解剖学意义上的眼睛在参考图中的颜色、身体比例、爪部结构、毛发或裸露皮肤的外观、花纹、耳型和原有尾部结构。保持机位、透视、焦距、裁切、焦点、曝光、白平衡，以及参考图中的背景、地面和光照一致。猫咪的整个身体，包括耳朵、爪子和任何可见的尾部，全程都留在原始画面内，并与画面边缘保留清晰余量。画面中只出现猫咪，周围地面保持空净。
+
+overall_soundscape: 全程持续安静的摄影棚环境底噪。0.30 秒时响起一次轻微的画外咂舌声，随后是蓄力蹲下时细微的爪部移动声、轻柔的蹬地声，以及 1.35–1.65 秒落地时前后紧接的轻柔肉垫触地声。最后的爪部调整在 2.70 秒前完成，之后只保留环境底噪和轻微呼吸声。
+
+non_diegetic_music: N/A
+
+### English prompt
+
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+
+integrated_multimodal_description: [Shot 1] Live-action, photorealistic studio pet footage. A static medium full-body shot begins with the seated cat and scene in <Picture 1>. This is one continuous four-second shot. The cat makes one small forward-and-upward hop, lands softly and returns to a comfortable upright seated pose. From 0.00 to 0.30 seconds, it holds the initial seated pose. At 0.30 seconds, one quiet off-screen tongue click draws its gaze slightly above the camera. From 0.30 to 0.85 seconds, the cat leans its chest slightly forward, raises the hindquarters out of the seated position and folds the hind legs into a compact crouch, with both front paws still touching the floor. From 0.85 to 1.10 seconds, the hind legs extend to push against the floor while both front paws lift and reach a short distance forward. From 1.10 to 1.35 seconds, the body travels through one low, compact arc, with all four paws visibly clear of the floor together for a brief moment. The head and chest stay low enough to preserve the available headroom, and the paws remain beneath or just ahead of the body. From 1.35 to 1.65 seconds, the front paws touch down first, followed closely by the hind paws; the elbows and hind legs bend to absorb the landing. The landing is no more than one front-paw length ahead of the starting position. The shadow stays on the floor, visibly separating from the paws during the hop and reconnecting at landing. From 1.65 to 2.50 seconds, the cat lowers its hindquarters, makes a small front-paw placement adjustment beneath the shoulders and raises its chest into an upright, front-facing seated pose near the starting position. By 2.70 seconds, it is comfortably balanced with both front paws on the floor and a relaxed, attentive gaze. This seated posture continues through 3.00 seconds. From 3.00 to 4.00 seconds, the cat maintains the posture reached by 2.70 seconds, with only faint breathing and tiny settling movements. Preserve the individual cat's facial proportions, each anatomical eye's reference color, body proportions, paw anatomy, coat or bare-skin appearance, markings, ear type and existing tail anatomy as the pose changes. Keep the camera position, perspective, focal length, crop, focus, exposure, white balance, reference background, floor and lighting consistent. The entire cat, including the ears, paws and any visible tail, remains inside the original frame with clear margins throughout. Only the cat is visible, and the surrounding floor stays clear.
+
+overall_soundscape: Quiet studio room tone continues throughout. One soft off-screen tongue click at 0.30 seconds is followed by faint paw movement during the crouch, a muted push-off and closely spaced soft paw-pad impacts during the landing between 1.35 and 1.65 seconds. The final paw adjustment finishes by 2.70 seconds, leaving only room tone and faint breathing.
+
+non_diegetic_music: N/A
+
+## 14. 玩逗猫棒 / catloop_play_teaser_wand
+
+英文原始文件：[14_catloop_play_teaser_wand.en.txt](14_catloop_play_teaser_wand.en.txt)
+
+### 中文审核全文
+
+对于目标视频，在目标视频的 0.00 秒处，完整参考 <Picture 1>（属于 [Shot 1]）。
+
+integrated_multimodal_description: [Shot 1] 真人实拍、照片级真实感的摄影棚宠物影像。固定机位的中景全身镜头，从 <Picture 1> 中猫咪的坐姿和场景开始。这是一个连续的四秒镜头。猫咪保持坐姿，与一根羽毛逗猫棒玩耍，左右前爪交替轻拍两次，然后安稳收尾。0.00–0.20 秒，猫咪保持首帧坐姿。0.20–0.60 秒，一小簇直接连接在细软棒杆末端的羽毛，从观众视角的右侧平滑进入画面。羽毛停在猫咪胸部下方的前侧，略偏向画面右侧，位于猫爪可以轻松够到的位置。可见的棒杆从羽毛处连续延伸，穿过画面右边缘，连接到画外持棒者；持棒者和手始终在画面外。猫咪的眼睛跟随羽毛，头部随之小幅转动。0.60–1.15 秒，羽毛横向轻晃一次。猫咪保持臀部坐地，用自身右前爪（观众视角左侧）着地支撑，抬起自身左前爪（观众视角右侧），轻拍羽毛一次，再把这只爪子放回地面。1.15–1.95 秒，棒杆引导羽毛在胸前沿一条短弧线移向观众视角的左侧。猫咪把支撑重心转移到已经着地的左前爪，抬起自身右前爪，轻拍羽毛一次，再把这只爪子放回地面。每次爪子接触羽毛时，羽毛短暂弯曲，棒杆末端随之轻微偏移；羽毛始终连接在棒杆上，并与猫爪保持清晰可辨的边界。任何时刻只抬起一只前爪，臀部全程保持坐地。1.95–2.15 秒，逗猫棒短暂停住，猫咪两只前爪着地，继续注视羽毛。2.15–2.60 秒，逗猫棒沿一条短路径平滑退向观众视角的右侧，从同一侧边缘完全退出画面。猫咪通过眼神和小幅转头跟随，两只前爪保持着地。到 2.70 秒时，它已处于舒适的直立坐姿，略微看向玩具离开的方向。这一专注姿态持续到 3.00 秒。3.00–4.00 秒，玩具保持在画面外，猫咪维持此姿态，只保留轻微呼吸和细小的稳定动作。随姿态变化，保留同一只猫的面部比例、每一只解剖学意义上的眼睛在参考图中的颜色、身体比例、爪部结构、毛发或裸露皮肤的外观、花纹、耳型和原有尾部结构。保持参考图中的构图、背景、地面和光照一致，机位固定，地面上的阴影随爪部动作合理变化。猫咪整个身体全程留在原始画面内，并与画面边缘保留清晰余量。场景中只出现猫咪和这一根各部分连续连接的逗猫棒；羽毛在下巴以下移动，使眼睛和面部保持无遮挡。
+
+overall_soundscape: 安静的摄影棚环境底噪持续存在，叠加轻微的羽毛窸窣声，以及 0.60–1.95 秒交替拍碰时两次轻柔的猫爪接触羽毛声。每只前爪放回地面时，伴随轻柔的肉垫触地声。最后一阵轻微的羽毛窸窣声在逗猫棒于 2.60 秒前离开画面时结束；2.70 秒后只保留环境底噪和轻微呼吸声。
+
+non_diegetic_music: N/A
+
+### English prompt
+
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+
+integrated_multimodal_description: [Shot 1] Live-action, photorealistic studio pet footage. A static medium full-body shot begins with the seated cat and scene in <Picture 1>. This is one continuous four-second shot. The cat stays seated while playing with one feather teaser wand, making two light alternating front-paw taps before settling. From 0.00 to 0.20 seconds, it holds the initial seated pose. From 0.20 to 0.60 seconds, one small feather tuft attached directly to the tip of a slender flexible rod enters smoothly from the viewer's right. The tuft stops just ahead of the cat's lower chest, slightly toward the viewer's right and within easy paw reach. The visible rod extends continuously from the tuft through the right edge to an off-screen holder; the holder and hand remain outside the frame. The cat's eyes track the tuft and its head follows with a small turn. From 0.60 to 1.15 seconds, the tuft makes one short sideways sway. Keeping the hindquarters seated and the anatomical right front paw, on the viewer's left, planted for support, the cat lifts its anatomical left front paw, on the viewer's right, taps the tuft once and returns that paw to the floor. From 1.15 to 1.95 seconds, the rod guides the tuft through a short arc toward the viewer's left, just in front of the chest. The cat transfers support onto the now-planted left front paw, lifts the anatomical right front paw, taps the tuft once and returns that paw to the floor. Each paw contact briefly bends the feathers and deflects the rod tip; the tuft remains attached and visibly distinct from the paw. Only one front paw is raised at a time, and the hindquarters stay on the floor throughout. From 1.95 to 2.15 seconds, the wand pauses while the cat watches with both front paws down. From 2.15 to 2.60 seconds, the wand withdraws smoothly along a short path toward the viewer's right and exits completely through the same edge. The cat follows with its eyes and a small head turn, keeping both front paws on the floor. By 2.70 seconds, it rests in a comfortable upright seated pose, looking slightly toward the departed toy. This attentive posture continues through 3.00 seconds. From 3.00 to 4.00 seconds, the toy stays outside the frame and the cat maintains this posture with only faint breathing and tiny settling movements. Preserve the individual cat's facial proportions, each anatomical eye's reference color, body proportions, paw anatomy, coat or bare-skin appearance, markings, ear type and existing tail anatomy as the pose changes. Keep the reference framing, background, floor and lighting consistent, with a locked camera and grounded shadows following the paw movements. The entire cat remains inside the original frame with clear margins throughout. Only the cat and this single connected wand occupy the scene; the feather tuft moves below the chin, keeping the eyes and face unobstructed.
+
+overall_soundscape: Quiet studio ambience continues beneath a faint feather rustle and two soft paw-to-feather contacts during the alternating taps between 0.60 and 1.95 seconds. Light paw-pad landings accompany each paw's return to the floor. A final soft feather rustle ends as the wand leaves by 2.60 seconds; after 2.70 seconds, only room tone and faint breathing remain.
+
+non_diegetic_music: N/A
+
+## 文件与验证
+
+- pending_append_metadata_v4.csv：160 条待追加行，使用 V4 原有图片路径和两列结构。
+- pending_append_metadata_smoke_v4.csv：6 条待追加行，沿用现有 smoke 的三张猫图。
+- prompt_pack_review_v1.json：保存两个动作的英文原文、中文审核稿和原始案例映射。
+- manifest.json：记录更新范围、源文件 SHA-256、版本及待审核状态。
+- validation.json：记录格式、路径、覆盖范围与源文件未改动的检查结果。
+
+上述检查仅确认文本结构和数据组织；四爪腾空、落地缓冲、交替拍碰、道具连续性及全身不出框的实际效果仍需模型推理验证。

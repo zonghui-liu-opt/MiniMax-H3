@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "official_I2VA_structure": "passed",
+  "english_chinese_artifact_consistency": "passed",
+  "source_case_mapping": "passed",
+  "full_image_coverage": 80,
+  "pending_full_rows": 160,
+  "smoke_image_coverage": 3,
+  "pending_smoke_rows": 6,
+  "smoke_candidate_rows": 42,
+  "smoke_candidate_preserves_all_original_rows_in_order": true,
+  "new_smoke_rows_are_subset_of_new_full_rows": true,
+  "duplicate_image_prompt_pairs": 0,
+  "image_paths_and_review_links": "passed",
+  "source_files_sha256_unchanged": true,
+  "inference_validation": "not_run",
+  "user_prompt_approval": "pending"
+}
