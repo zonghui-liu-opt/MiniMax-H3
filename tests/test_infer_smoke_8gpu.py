@@ -86,7 +86,7 @@ class SmokeTest(unittest.TestCase):
         (self.root / "cat.png").write_bytes(b"test-image")
         self.metadata = []
         for version in ("v2", "v1"):
-            path = self.root / f"{version}.csv"
+            path = self.root / f"metadata_smoke_{version}.csv"
             with path.open("w", newline="") as handle:
                 writer = csv.writer(handle)
                 writer.writerow(["input_image", "prompt"])
@@ -94,6 +94,48 @@ class SmokeTest(unittest.TestCase):
                     writer.writerow(["cat.png", f"{version}: prompt {i}\nsecond line"])
             self.metadata.append(path)
         self.output = self.root / "out"
+
+    def test_default_v3_first_frame_on_two_replicas_and_resume(self):
+        # ROOT contains only v3: accidentally loading v1/v2 must fail this run.
+        metadata = self.root / "data_h3/metadata_smoke_v3.csv"
+        metadata.parent.mkdir()
+        with metadata.open("w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["input_image", "prompt", "last_image"])
+            for i in range(4):
+                writer.writerow(["../cat.png", f"v3: prompt {i}\nsecond line",
+                                 "nonexistent-tail.png"])
+        with mock.patch.object(smoke, "ROOT", self.root), \
+                servers(barrier=threading.Barrier(2)) as instances:
+            argv = ["--server-urls", *[f"http://127.0.0.1:{s.server_port}" for s in instances],
+                    "--poll-interval", ".001"]
+            args = smoke.build_parser().parse_args(argv)
+            self.assertEqual(args.metadata, metadata)
+            self.assertIsNone(args.metadata_v1)
+            self.assertTrue(args.single_frame)
+            self.assertEqual(args.output_dir, self.root / "results/smoke_v3_i2va")
+            self.assertEqual(smoke.main(argv), 0)
+            self.assertTrue(all(s.submitted for s in instances))
+            requests = [request for s in instances for request in s.submitted]
+            self.assertEqual(len(requests), 4)
+            self.assertEqual(sorted(r["seed"] for r in requests), list(range(4)))
+            for request in requests:
+                self.assertEqual(request["task"], "fl2va")
+                self.assertEqual([c["frame_index"] for c in request["conditions"]], [0])
+                self.assertEqual(request["conditions"][0]["role"], "keyframe")
+                self.assertTrue(request["conditions"][0]["uri"].startswith("data:image/png;base64,"))
+                self.assertEqual(request["target"]["duration_seconds"], 4.0)
+                self.assertEqual(request["prompt"], f"v3: prompt {request['seed']}\nsecond line")
+            summary = json.loads((args.output_dir / "manifest.json").read_text())
+            self.assertEqual(summary["total"], 4)
+            self.assertEqual(summary["completed"], 4)
+            self.assertEqual(summary["manifests"],
+                             [str((args.output_dir / "metadata_smoke_v3/manifest.json").resolve())])
+            states = list((args.output_dir / "metadata_smoke_v3/states").glob("*.json"))
+            self.assertEqual(len(states), 4)
+            self.assertTrue(all(json.loads(p.read_text())["last_image"] is None for p in states))
+            self.assertEqual(smoke.main(argv), 0)
+            self.assertEqual(sum(len(s.submitted) for s in instances), 4)
 
     def argv(self, instances, *extra):
         return ["--metadata", str(self.metadata[0]), "--metadata-v1", str(self.metadata[1]),
@@ -126,16 +168,20 @@ class SmokeTest(unittest.TestCase):
     def test_two_replicas_balance_and_resume_completed(self):
         # Both first POSTs must be in flight together or the barrier fails.
         with servers(barrier=threading.Barrier(2)) as instances:
-            self.assertEqual(smoke.main(self.argv(instances)), 0)
+            argv = self.argv(instances, "--first-last-frame")
+            self.assertEqual(smoke.main(argv), 0)
             counts = [len(s.submitted) for s in instances]
             self.assertEqual(sum(counts), 8)
+            for server in instances:
+                for request in server.submitted:
+                    self.assertEqual([c["frame_index"] for c in request["conditions"]], [0, -1])
             self.assertGreater(counts[1], counts[0])
             self.assertEqual(len(list(self.output.glob("*/videos/*.mp4"))), 8)
             for label in ("metadata_smoke_v2", "metadata_smoke_v1"):
                 manifest = json.loads((self.output / label / "manifest.json").read_text())
                 self.assertEqual(manifest["completed"], 4)
                 self.assertEqual([r["seed"] for r in manifest["results"]], list(range(4)))
-            self.assertEqual(smoke.main(self.argv(instances)), 0)
+            self.assertEqual(smoke.main(argv), 0)
             self.assertEqual([len(s.submitted) for s in instances], counts)
             summary = json.loads((self.output / "manifest.json").read_text())
             self.assertEqual(summary["generated"], 0)
@@ -219,6 +265,7 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual([item.port for item in parsed], ["30010", "30012"])
         self.assertEqual([item.master_port for item in parsed], ["31010", "31011"])
         self.assertEqual([item.scheduler_port for item in parsed], ["32010", "32011"])
+        self.assertEqual([item.model_variant for item in parsed], ["fl2va", "fl2va"])
         self.assertEqual(set(ports), {30010, 30011, 30012, 30013,
                                      31010, 31011, 32010, 32011})
         self.assertEqual([group for group, _ in commands], ["0,1,2,3", "4,5,6,7"])

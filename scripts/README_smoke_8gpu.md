@@ -1,15 +1,23 @@
-# 两份 smoke CSV 的 8 × H100 并行推理
+# smoke v3 首帧引导的 8 × H100 并行推理
 
 从仓库根目录执行；使用已经跑通 `infer.sh` 的 SGLang 环境，无需安装新依赖。
+默认仅处理 `data_h3/metadata_smoke_v3.csv` 的 36 条数据，以每行的 `input_image`
+作为唯一首帧条件，prompt 按 CSV 原文发送。图片相对路径以 CSV 所在目录解析。
 
 ```bash
-# 校验全部 72 条输入、打印部署命令、生成请求预览；不启动模型
+# 校验 v3 的全部 36 条输入、打印部署命令、生成请求预览；不启动模型
 bash infer_smoke_8gpu.sh --dry-run
 
-# 自动启动两个四卡服务，等待加载完成，再跑完两份 CSV
+# 自动启动两个四卡服务，等待加载完成，再跑完 v3
 bash infer_smoke_8gpu.sh \
   --model-path /srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3
 ```
+
+首帧模式（I2VA）在 SGLang 中仍使用 `--model-variant fl2va` 和 `"task": "fl2va"`。
+每条请求的 `conditions` 只有一张 `role: keyframe`、`frame_index: 0` 的图片，
+不添加 `frame_index: -1`，也不读取 CSV 的 `last_image` 作为条件。
+这是 [SGLang 官方支持的首帧模式](https://docs.sglang.io/cookbook/diffusion/MiniMax/MiniMax-H3#4-generate-video-and-audio)，
+与仓库 `scripts/readme/full-2k-i2va-h3-base.sh` 的条件结构一致。
 
 默认 GPU 分组 `0,1,2,3` 和 `4,5,6,7`，每组沿用已跑通的
 `--num-gpus 4 --tp-size 2 --ulysses-degree 2 --performance-mode speed`。
@@ -31,7 +39,7 @@ SGLang Diffusion 的两个副本如果都使用默认 `master_port=30005`，可�
 发生 `EADDRINUSE`；仅分开 HTTP 端口不能隔离分布式初始化。
 本入口不传入 `--nccl-port`。旧参数 `--base-nccl-port` 作为 `--base-master-port` 的兼容别名，
 实际始终传入 Diffusion 使用的 `--master-port`。
-各组内部做模型并行，两组之间处理不同视频。两份 CSV 共用任务队列，
+各组内部做模型并行，两组之间处理不同视频。v3 的全部任务共用一个队列，
 谁先完成谁领取下一条；不会给慢副本固定分配一半数据。
 每个副本默认仅一个在途请求，总计两个，避免把 HTTP 排队误当成 GPU 并行。
 
@@ -64,21 +72,32 @@ bash infer_smoke_8gpu.sh \
 自动启动模式会在完成、失败或收到 Ctrl-C/SIGTERM 后清理本次启动的服务进程组。
 可在 tmux 中运行完整命令以保持长任务。
 
-继承原客户端的采样参数：50 步、768 短边、4 秒、同图首尾帧、seed 从 0 按行递增。
-两份 CSV 各自从 seed 0 开始，方便对照 v1/v2；每份的文件名仍带原始行索引。
-提示词中的末帧时间为 4.46 秒；需要对齐时显式使用 `--duration-seconds 4.46`。
-参数会写入请求预览。修改 prompt、时长、采样设置后应使用新输出目录，
+继承原客户端的采样参数：50 步、768 短边、4 秒、seed 从 0 按行递增。
+v3 提示词为四秒视频，与默认时长一致；文件名带原始行索引。
+默认输出改为 `results/smoke_v3_i2va`，避免复用旧版首尾帧结果。
+参数会写入请求预览。修改 prompt、时长、首尾帧模式或采样设置后应使用新输出目录，
 因为断点逻辑沿用原客户端的文件名匹配，不会自动判断配置是否变化。
 
 ```bash
-# 小规模检查：每份 CSV 前 2 条，共 4 条
-bash infer_smoke_8gpu.sh --limit 2 --output-dir results/smoke_check
-
-# 与提示词时长对齐
-bash infer_smoke_8gpu.sh --duration-seconds 4.46 --output-dir results/smoke_4_46s
+# 小规模检查：仅 v3 前 2 条，共 2 条
+bash infer_smoke_8gpu.sh --limit 2 --output-dir results/smoke_v3_i2va_check
 
 # 在默认并发 1 跑通后，对比每副本 2 个在途请求是否能提高实际吞吐
-bash infer_smoke_8gpu.sh --max-concurrency 2 --output-dir results/smoke_c2
+bash infer_smoke_8gpu.sh --max-concurrency 2 --output-dir results/smoke_v3_i2va_c2
+```
+
+`--metadata` 可替换默认 CSV；默认不会读取 v1/v2，也不会读取
+`metadata_smoke_v3_i2va.csv` 或 `metadata_smoke_v3_fl2va.csv`。
+`--single-frame` 已默认开启，无需额外传入。
+保留旧模式的显式入口：`--first-last-frame` 启用首尾帧引导，
+`--metadata-v1` 仅在显式提供时追加第二份 CSV。
+如需重现旧版两份 CSV 的推理，可执行：
+
+```bash
+bash infer_smoke_8gpu.sh --first-last-frame \
+  --metadata data_h3/metadata_smoke_v2.csv \
+  --metadata-v1 data_h3/metadata_smoke_v1.csv \
+  --output-dir results/smoke
 ```
 
 `--max-concurrency` 控制每个副本的客户端在途请求数，不保证 SGLang 同时执行多个视频。
@@ -91,16 +110,11 @@ bash infer_smoke_8gpu.sh --max-concurrency 2 --output-dir results/smoke_c2
 ## 输出与恢复
 
 ```text
-results/smoke/
+results/smoke_v3_i2va/
   manifest.json                  # 总量、耗时、新提交并完成的吞吐（不含模型启动）
   logs/<本次运行编号>/server_30010.log
   logs/<本次运行编号>/server_30012.log
-  metadata_smoke_v2/
-    manifest.json
-    videos/*.mp4
-    states/*.json
-    requests/*.json
-  metadata_smoke_v1/
+  metadata_smoke_v3/              # 使用 CSV 文件名（不含扩展名）作为子目录
     manifest.json
     videos/*.mp4
     states/*.json
@@ -126,4 +140,6 @@ results/smoke/
 本地验证：`python3 -m unittest discover -s tests -v`。
 回归测试用真实子进程绑定 HTTP、HTTP+1 Broker、master、scheduler 四类端口，
 覆盖旧布局冲突、全部八个端口的占用预检、端口越界、双副本提交和恢复、
-启动失败/超时诊断与进程清理；不需要安装 SGLang 或访问 GPU。
+启动失败/超时诊断与进程清理，以及默认只读取 v3、双副本仅发送首帧条件、
+忽略尾帧列、下载和恢复、显式首尾帧兼容模式；不需要安装 SGLang 或访问 GPU。
+这些校验不代表已完成真实 GPU 推理，视频生成效果仍需实机验证。

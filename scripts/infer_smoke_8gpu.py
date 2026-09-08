@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run both smoke CSVs on independent SGLang replicas, using the proven client."""
+"""Run smoke v3 with first-frame guidance on independent SGLang replicas."""
 
 from __future__ import annotations
 
@@ -27,13 +27,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def build_parser():
     parser = batch.build_parser()
-    parser.description = "8 张 H100：两个 4 卡 SGLang 副本，动态分配两份 smoke CSV"
+    parser.description = "8 张 H100：两个 4 卡 SGLang 副本，默认仅对 smoke v3 进行首帧引导推理"
     parser.set_defaults(
-        metadata=ROOT / "data_h3/metadata_smoke_v2.csv",
-        output_dir=ROOT / "results/smoke",
+        metadata=ROOT / "data_h3/metadata_smoke_v3.csv",
+        output_dir=ROOT / "results/smoke_v3_i2va",
+        single_frame=True,
     )
     parser.add_argument("--metadata-v1", type=Path,
-                        default=ROOT / "data_h3/metadata_smoke_v1.csv")
+                        help="兼容旧入口：显式指定时才追加该 CSV；默认只推理 --metadata")
     parser.add_argument("--server-urls", nargs="+",
                         help="连接已有服务，不启动/停止服务；每个 URL 一个独立副本")
     parser.add_argument("--model-path", default=os.environ.get(
@@ -55,7 +56,8 @@ def build_parser():
     parser.add_argument("--retry-failed", action="store_true",
                         help="重提服务端明确失败的任务；不重提仍在运行或仅 HTTP 失败的任务")
     parser.epilog = ("--max-concurrency 是每个服务的在途任务数，默认 1；"
-                     "--metadata 指定 v2 CSV，--limit 对每份 CSV 分别生效。"
+                     "默认只读取 metadata_smoke_v3.csv，--limit 限制该 CSV 的条数。"
+                     "仅显式传入 --metadata-v1 时追加第二份 CSV，--limit 对每份分别生效。"
                      "自动启动的服务会在完成或中断时停止。")
     return parser
 
@@ -167,11 +169,16 @@ def prepare(args, urls):
     datasets = []
     shared = queue.Queue()
     pinned = {url: queue.Queue() for url in urls}
-    for label, metadata in (("metadata_smoke_v2", args.metadata),
-                            ("metadata_smoke_v1", args.metadata_v1)):
+    metadata_paths = [args.metadata]
+    if args.metadata_v1 is not None:
+        metadata_paths.append(args.metadata_v1)
+    labels = [metadata.stem for metadata in metadata_paths]
+    if len(set(labels)) != len(labels):
+        raise batch.BatchError("CSV 文件名（不含扩展名）不能重复，以免覆盖同一输出子目录")
+    for metadata in metadata_paths:
         options = argparse.Namespace(**vars(args))
         options.metadata = metadata
-        options.output_dir = args.output_dir / label
+        options.output_dir = args.output_dir / metadata.stem
         cases = batch.load_cases(options)
         datasets.append((options, cases))
         for case in cases:

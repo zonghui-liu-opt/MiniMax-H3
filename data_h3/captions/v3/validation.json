@@ -1,0 +1,18 @@
+{
+  "status": "local_validation_passed_generation_not_run",
+  "prompt_count": 12,
+  "rewritten_count": 8,
+  "unchanged_v2_count": 4,
+  "fl2va_cases": 21,
+  "i2va_cases": 15,
+  "checks": [
+    "official base field structure",
+    "no unbound video references",
+    "text and SHA256 match",
+    "four regression prompt texts unchanged",
+    "image and original seed mapping preserved",
+    "request previews have intended keyframe conditions",
+    "request and target duration fields agree"
+  ],
+  "limitation": "No internal inference, returned video duration or visual success rate validated."
+}

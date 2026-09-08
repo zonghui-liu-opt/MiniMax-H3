@@ -294,6 +294,7 @@ def build_request(case: Case, args: argparse.Namespace) -> dict[str, Any]:
     request: dict[str, Any] = {
         "prompt": case.prompt,
         "seconds": case.duration_seconds,
+        # SGLang uses fl2va for first-only [0] as well as first/last [0, -1].
         "task": "fl2va",
         "conditions": conditions,
         "target": {
@@ -708,11 +709,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--retry-backoff", type=float, default=1.0, help="HTTP 指数退避基数（秒）"
     )
-    parser.add_argument(
+    frame_mode = parser.add_mutually_exclusive_group()
+    frame_mode.add_argument(
         "--single-frame",
         action="store_true",
-        help="只将 input_image 作为首帧；默认缺少 last_image 时同图首尾锚定",
+        help="只将 input_image 作为首帧，忽略 last_image 列，不添加尾帧条件",
     )
+    frame_mode.add_argument(
+        "--first-last-frame",
+        dest="single_frame",
+        action="store_false",
+        help="使用首尾帧引导；缺少 last_image 时使用同图首尾锚定",
+    )
+    parser.set_defaults(single_frame=False)
     parser.add_argument(
         "--file-uri",
         action="store_true",

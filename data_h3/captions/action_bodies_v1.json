@@ -1,0 +1,149 @@
+{
+  "schema_version": "catloop_h3_action_bodies_v1",
+  "actions": [
+    {
+      "action_id": "catloop_idle",
+      "motion_path": "Between 0.40 and 2.60 seconds, the cat remains seated and makes one natural blink while a very small breathing motion passes through the chest. Its paws, hindquarters, head direction, and tail remain planted. From 2.60 seconds onward, the eyes are open and the breathing motion settles back to the endpoint state.",
+      "soundscape": "Quiet studio room tone with the cat's soft breathing.",
+      "direction_family": "neutral",
+      "pair_id": "idle_control",
+      "pair_role": "neutral",
+      "paired_action_id": null,
+      "anatomical_direction": null,
+      "viewer_direction": null,
+      "screen_motion_direction": null
+    },
+    {
+      "action_id": "catloop_pull_left_ear",
+      "motion_path": "From 0.40 seconds, the cat's anatomical left ear, located on the viewer's right, flexes gently outward a short distance as if under a light invisible tug, while the head, body, paws, opposite ear, and tail remain still. Near 1.70 seconds the ear reaches one clear flexible peak. It is released and smoothly returns to its original upright shape by 3.40 seconds. The clean frame continues to contain the cat alone.",
+      "soundscape": "Quiet room tone with a faint rustle of fur as the ear flexes and settles.",
+      "direction_family": "local_anatomical",
+      "pair_id": "pull_ear",
+      "pair_role": "forward",
+      "paired_action_id": "catloop_pull_right_ear",
+      "anatomical_direction": "left",
+      "viewer_direction": "right",
+      "screen_motion_direction": null
+    },
+    {
+      "action_id": "catloop_pull_right_ear",
+      "motion_path": "From 0.40 seconds, the cat's anatomical right ear, located on the viewer's left, flexes gently outward a short distance as if under a light invisible tug, while the head, body, paws, opposite ear, and tail remain still. Near 1.70 seconds the ear reaches one clear flexible peak. It is released and smoothly returns to its original upright shape by 3.40 seconds. The clean frame continues to contain the cat alone.",
+      "soundscape": "Quiet room tone with a faint rustle of fur as the ear flexes and settles.",
+      "direction_family": "local_anatomical",
+      "pair_id": "pull_ear",
+      "pair_role": "reverse",
+      "paired_action_id": "catloop_pull_left_ear",
+      "anatomical_direction": "right",
+      "viewer_direction": "left",
+      "screen_motion_direction": null
+    },
+    {
+      "action_id": "catloop_catch_yarn_left_to_right",
+      "motion_path": "At 0.40 seconds, a small plain wool ball rolls into view from the viewer's left and travels toward the viewer's right along the floor. The cat fixes its gaze on the ball, tracks it with one small head movement, then makes one compact forward reach and briefly pins the ball under a front paw near 1.90 seconds. As the cat withdraws the paw, it gives the ball one small nudge in the same rightward direction; the ball continues rolling and exits fully at the viewer's right edge by 3.30 seconds while the head and gaze recenter.",
+      "soundscape": "A soft wool ball rolls over the floor, followed by one light paw tap and quiet studio room tone.",
+      "direction_family": "screen_prop",
+      "pair_id": "catch_yarn",
+      "pair_role": "forward",
+      "paired_action_id": "catloop_catch_yarn_right_to_left",
+      "anatomical_direction": null,
+      "viewer_direction": null,
+      "screen_motion_direction": "left_to_right"
+    },
+    {
+      "action_id": "catloop_catch_yarn_right_to_left",
+      "motion_path": "At 0.40 seconds, a small plain wool ball rolls into view from the viewer's right and travels toward the viewer's left along the floor. The cat fixes its gaze on the ball, tracks it with one small head movement, then makes one compact forward reach and briefly pins the ball under a front paw near 1.90 seconds. As the cat withdraws the paw, it gives the ball one small nudge in the same leftward direction; the ball continues rolling and exits fully at the viewer's left edge by 3.30 seconds while the head and gaze recenter.",
+      "soundscape": "A soft wool ball rolls over the floor, followed by one light paw tap and quiet studio room tone.",
+      "direction_family": "screen_prop",
+      "pair_id": "catch_yarn",
+      "pair_role": "reverse",
+      "paired_action_id": "catloop_catch_yarn_left_to_right",
+      "anatomical_direction": null,
+      "viewer_direction": null,
+      "screen_motion_direction": "right_to_left"
+    },
+    {
+      "action_id": "catloop_roll_left_and_reach",
+      "motion_path": "From 0.40 seconds, the cat shifts its weight toward its anatomical left side, which is the viewer's right, lowers that shoulder, and performs one compact partial roll onto its left side while extending the nearer front paw once. Near 1.90 seconds the body reaches one coherent, fully visible motion peak. The paw retracts, the cat reverses the partial roll, plants both front paws, and smoothly pushes back up by 3.50 seconds.",
+      "soundscape": "Soft paw contact and a brief rustle of fur against the floor over quiet room tone.",
+      "direction_family": "whole_body_anatomical",
+      "pair_id": "roll_and_reach",
+      "pair_role": "forward",
+      "paired_action_id": "catloop_roll_right_and_reach",
+      "anatomical_direction": "left",
+      "viewer_direction": "right",
+      "screen_motion_direction": null
+    },
+    {
+      "action_id": "catloop_roll_right_and_reach",
+      "motion_path": "From 0.40 seconds, the cat shifts its weight toward its anatomical right side, which is the viewer's left, lowers that shoulder, and performs one compact partial roll onto its right side while extending the nearer front paw once. Near 1.90 seconds the body reaches one coherent, fully visible motion peak. The paw retracts, the cat reverses the partial roll, plants both front paws, and smoothly pushes back up by 3.50 seconds.",
+      "soundscape": "Soft paw contact and a brief rustle of fur against the floor over quiet room tone.",
+      "direction_family": "whole_body_anatomical",
+      "pair_id": "roll_and_reach",
+      "pair_role": "reverse",
+      "paired_action_id": "catloop_roll_left_and_reach",
+      "anatomical_direction": "right",
+      "viewer_direction": "left",
+      "screen_motion_direction": null
+    },
+    {
+      "action_id": "catloop_lick_left_paw",
+      "motion_path": "From 0.55 seconds, the cat raises its anatomical left front paw, located on the viewer's right, brings it naturally toward the mouth, and gives the paw two small deliberate licks around the middle of the shot. It lowers the paw along the same compact path and plants it back in its original position by 3.35 seconds.",
+      "soundscape": "Two quiet licking sounds and a faint movement of fur over low studio room tone.",
+      "direction_family": "local_anatomical",
+      "pair_id": "lick_paw",
+      "pair_role": "forward",
+      "paired_action_id": "catloop_lick_right_paw",
+      "anatomical_direction": "left",
+      "viewer_direction": "right",
+      "screen_motion_direction": null
+    },
+    {
+      "action_id": "catloop_lick_right_paw",
+      "motion_path": "From 0.55 seconds, the cat raises its anatomical right front paw, located on the viewer's left, brings it naturally toward the mouth, and gives the paw two small deliberate licks around the middle of the shot. It lowers the paw along the same compact path and plants it back in its original position by 3.35 seconds.",
+      "soundscape": "Two quiet licking sounds and a faint movement of fur over low studio room tone.",
+      "direction_family": "local_anatomical",
+      "pair_id": "lick_paw",
+      "pair_role": "reverse",
+      "paired_action_id": "catloop_lick_left_paw",
+      "anatomical_direction": "right",
+      "viewer_direction": "left",
+      "screen_motion_direction": null
+    },
+    {
+      "action_id": "catloop_eat_cat_food",
+      "motion_path": "At 0.40 seconds, a small plain shallow food dish slides into view from the lower edge and stops directly in front of the cat. The cat lowers its head, takes two small bites near the middle of the shot, and raises its head again. The dish slides back out completely along the same path by 3.20 seconds while the cat recenters its head and chest.",
+      "soundscape": "A light dish slide is followed by two soft eating sounds, then the dish slides away over quiet room tone.",
+      "direction_family": "transient_prop_neutral",
+      "pair_id": "eat_cat_food",
+      "pair_role": "neutral",
+      "paired_action_id": null,
+      "anatomical_direction": null,
+      "viewer_direction": null,
+      "screen_motion_direction": "bottom_in_then_out"
+    },
+    {
+      "action_id": "catloop_lie_left_and_sleep",
+      "motion_path": "From 0.40 seconds, the cat lowers its chest and shifts toward its anatomical left side, which is the viewer's right, settling into one compact lying pose with the forepaws tucked. Near 1.65 seconds it closes its eyes for one brief resting beat, then reopens them, plants the paws, and smoothly rises back up by 3.55 seconds.",
+      "soundscape": "Soft paw and fur contact with the floor, followed by one brief interval of calm breathing.",
+      "direction_family": "whole_body_anatomical",
+      "pair_id": "lie_and_sleep",
+      "pair_role": "forward",
+      "paired_action_id": "catloop_lie_right_and_sleep",
+      "anatomical_direction": "left",
+      "viewer_direction": "right",
+      "screen_motion_direction": null
+    },
+    {
+      "action_id": "catloop_lie_right_and_sleep",
+      "motion_path": "From 0.40 seconds, the cat lowers its chest and shifts toward its anatomical right side, which is the viewer's left, settling into one compact lying pose with the forepaws tucked. Near 1.65 seconds it closes its eyes for one brief resting beat, then reopens them, plants the paws, and smoothly rises back up by 3.55 seconds.",
+      "soundscape": "Soft paw and fur contact with the floor, followed by one brief interval of calm breathing.",
+      "direction_family": "whole_body_anatomical",
+      "pair_id": "lie_and_sleep",
+      "pair_role": "reverse",
+      "paired_action_id": "catloop_lie_left_and_sleep",
+      "anatomical_direction": "right",
+      "viewer_direction": "left",
+      "screen_motion_direction": null
+    }
+  ]
+}
