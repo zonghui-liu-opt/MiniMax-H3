@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import json
@@ -26,6 +27,109 @@ PROMPT = "\n\n".join(f"{section}:\n" + (
     for section in ref.SECTIONS)
 
 
+class RefResolutionConfigTest(unittest.TestCase):
+    def test_supported_native_sizes_and_invalid_resolutions(self):
+        for text, target in (("480x832", (468, "9:16")),
+                             ("832x480", (468, "16:9")),
+                             ("512x512", (512, "1:1")),
+                             ("640x480", (480, "4:3"))):
+            with self.subTest(resolution=text):
+                self.assertEqual(ref.resolution_target(ref.parse_resolution(text)), target)
+        for text in ("480*832", "480x0", "480x831", "-480x832", "480x704", "2048x2048"):
+            with self.subTest(resolution=text), self.assertRaises(argparse.ArgumentTypeError):
+                ref.parse_resolution(text)
+
+    def legacy_guards(self, root):
+        directory = root / "multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3"
+        directory.mkdir(parents=True)
+        request = directory / "request_validation.py"
+        request.write_text('''def check(short_edge, path="target"):
+    if short_edge != 768:
+        raise ValueError(
+            f"{path}.short_edge must be 768 for minimax_h3, got {short_edge}"
+        )
+    return short_edge
+''')
+        shape = directory / "resolved_plan.py"
+        shape.write_text('''MINIMAX_H3_BASE_SHORT_EDGE = 768
+def check(value):
+    try:
+        short_edge = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("target.short_edge must be 768") from exc
+    if short_edge != MINIMAX_H3_BASE_SHORT_EDGE or value != short_edge:
+        raise ValueError(
+            f"target.short_edge must be 768 for MiniMax H3 shape policy v2, got {value!r}"
+        )
+    return short_edge
+''')
+        return request, shape
+
+    def test_legacy_guards_accept_positive_sizes_and_patch_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = self.legacy_guards(root)
+            self.assertEqual(entry.enable_custom_short_edge(root), list(paths))
+            for path in paths:
+                namespace = {}
+                exec(compile(path.read_text(), str(path), "exec"), namespace)
+                self.assertEqual(namespace["check"](468), 468)
+                self.assertEqual(namespace["check"](768), 768)
+                with self.assertRaises(ValueError):
+                    namespace["check"](0)
+            before = {p: p.read_bytes() for p in paths}
+            self.assertEqual(entry.enable_custom_short_edge(root), [])
+            self.assertEqual(before, {p: p.read_bytes() for p in paths})
+
+    def test_unknown_or_invalid_source_never_partially_changes_installation(self):
+        for invalid_source in ("# unfamiliar implementation\n", "\ndef syntax_error(:\n"):
+            with self.subTest(source=invalid_source), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                paths = self.legacy_guards(root)
+                if invalid_source.startswith("#"):
+                    paths[1].write_text(invalid_source)
+                else:
+                    paths[1].write_text(paths[1].read_text() + invalid_source)
+                before = {p: p.read_bytes() for p in paths}
+                self.assertEqual(entry.enable_custom_short_edge(root), [])
+                self.assertEqual(before, {p: p.read_bytes() for p in paths})
+
+    def test_second_source_write_failure_restores_first_source(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = self.legacy_guards(root)
+            before = {p: p.read_bytes() for p in paths}
+            modes = {p: p.stat().st_mode for p in paths}
+            atomic_text = ref.metadata_tools.atomic_text
+            writes = []
+
+            def fail_second_write(path, content):
+                writes.append(path)
+                if len(writes) == 2:
+                    self.assertNotEqual(paths[0].read_bytes(), before[paths[0]])
+                    raise OSError("second source is read-only")
+                atomic_text(path, content)
+
+            with mock.patch.object(ref.metadata_tools, "atomic_text", side_effect=fail_second_write), \
+                    self.assertRaisesRegex(OSError, "second source is read-only"):
+                entry.enable_custom_short_edge(root)
+            self.assertEqual(writes, [paths[0], paths[1], paths[0]])
+            self.assertEqual(before, {p: p.read_bytes() for p in paths})
+            self.assertEqual(modes, {p: p.stat().st_mode for p in paths})
+
+    def test_compatibility_patch_only_runs_for_explicit_server_start_resolution(self):
+        for argv, expected in (([], False), (["--resolution", "480x832"], False),
+                               (["--serve-only"], False),
+                               (["--serve-only", "--resolution", "480x832", "--dry-run"], False),
+                               (["--serve-only", "--resolution", "480x832"], True),
+                               (["--start-servers", "--resolution", "480x832"], True)):
+            with self.subTest(argv=argv), \
+                    mock.patch.object(entry, "enable_custom_short_edge", return_value=[]) as enable, \
+                    mock.patch.object(runner, "main", return_value=0):
+                self.assertEqual(entry.main(argv), 0)
+                self.assertEqual(enable.call_count, int(expected))
+
+
 @unittest.skipUnless(shutil.which("ffprobe") and shutil.which("ffmpeg"), "needs ffmpeg/ffprobe")
 class RefInferenceTest(unittest.TestCase):
     @classmethod
@@ -43,6 +147,10 @@ class RefInferenceTest(unittest.TestCase):
                         "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
                         "-c:v", "copy", "-c:a", "aac", "-shortest",
                         str(cls.media / "source.mp4")], check=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+                        "color=c=blue:s=480x832:r=24", "-frames:v", "1", "-an",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                        str(cls.media / "output480.mp4")], check=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -155,6 +263,69 @@ class RefInferenceTest(unittest.TestCase):
         base.atomic_write_json(paths.state, ref.state_payload(case, paths, status="completed"))
         with self.assertRaisesRegex(base.BatchError, "参数不同"):
             ref.load_cases(args)
+
+    def test_native_resolution_request_changes_fingerprint_and_rejects_old_state(self):
+        original = ref.load_cases(self.args("--limit", "1"))[0]
+        historical = ref.load_cases(self.args("--limit", "1", "--resolution", "768x1344"))[0]
+        self.assertEqual(original.request_fingerprint, historical.request_fingerprint)
+        args = self.args("--limit", "1", "--resolution", "480x832")
+        case = ref.load_cases(args)[0]
+        request = ref.build_request(case, args)
+        self.assertEqual(case.resolution, (480, 832))
+        self.assertEqual(request["target"], {"short_edge": 468, "aspect_ratio": "9:16",
+                                             "duration_seconds": 4})
+        self.assertTrue({"width", "height", "size"}.isdisjoint(request))
+        self.assertNotEqual(original.request_fingerprint, case.request_fingerprint)
+        paths = ref.case_paths(self.output, original)
+        base.atomic_write_json(paths.state, ref.state_payload(original, paths, status="completed"))
+        with self.assertRaisesRegex(base.BatchError, "参数不同"):
+            ref.load_cases(args)
+
+    def test_requested_resolution_checks_real_video_and_skips_without_resubmitting(self):
+        def download(_video_id, destination):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(self.media / "output480.mp4", destination)
+
+        with servers() as instances, \
+                mock.patch.object(base.SGLangClient, "download", side_effect=download) as fetch:
+            argv = ("--limit", "1", "--resolution", "480x832")
+            self.assertEqual(self.run_on(instances[:1], *argv), 0)
+            self.assertEqual(self.run_on(instances[:1], *argv), 0)
+            self.assertEqual(len(instances[0].submitted), 1)
+            self.assertEqual(fetch.call_count, 1)
+        output = next((self.output / "videos/drag_ear").glob("*.mp4"))
+        self.assertEqual(output.read_bytes(), (self.media / "output480.mp4").read_bytes())
+        state = base.read_json(next((self.output / "states/drag_ear").glob("*.json")))
+        self.assertEqual(state["status"], "completed")
+        self.assertEqual(state["resolution"], [480, 832])
+
+    def test_wrong_resolution_fails_without_rescaling_or_resubmitting_completed_job(self):
+        source = self.media / "motion.mp4"
+
+        def download(_video_id, destination):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+
+        with servers() as instances, \
+                mock.patch.object(base.SGLangClient, "download", side_effect=download) as fetch:
+            argv = ("--limit", "1", "--resolution", "480x832")
+            self.assertEqual(self.run_on(instances[:1], *argv), 1)
+            state_path = next((self.output / "states/drag_ear").glob("*.json"))
+            state = base.read_json(state_path)
+            self.assertEqual(state["status"], "failed")
+            self.assertEqual(state["server_response"]["status"], "completed")
+            self.assertIn("48x80", state["error"])
+            self.assertIn("480x832", state["error"])
+            output = next((self.output / "videos/drag_ear").glob("*.mp4"))
+            self.assertEqual(output.read_bytes(), source.read_bytes())
+            self.assertEqual(self.run_on(instances[:1], *argv, "--retry-failed"), 1)
+            self.assertEqual(fetch.call_count, 1)
+            self.assertEqual(len(instances[0].submitted), 1)
+            output.unlink()
+            source = self.media / "output480.mp4"
+            self.assertEqual(self.run_on(instances[:1], *argv), 0)
+            self.assertEqual(fetch.call_count, 2)
+            self.assertEqual(len(instances[0].submitted), 1)
 
     def test_reference_only_server_downloads_default_and_rejects_lock_without_fallback(self):
         attempts = []

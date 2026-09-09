@@ -37,6 +37,48 @@ class Case(base.Case):
     motion_slug: str
     aspect_ratio: str
     request_fingerprint: str
+    target_short_edge: int = 768
+    resolution: tuple[int, int] | None = None
+
+
+def parse_resolution(value):
+    match = re.fullmatch(r"([0-9]+)[xX×]([0-9]+)", value)
+    if not match:
+        raise argparse.ArgumentTypeError("分辨率使用 WIDTHxHEIGHT，例如480x832")
+    width, height = map(int, match.groups())
+    if min(width, height) <= 0 or width % 32 or height % 32:
+        raise argparse.ArgumentTypeError("H3原生生成宽高必须为正数且都是32的倍数")
+    try:
+        resolution_target((width, height))
+    except base.BatchError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return width, height
+
+
+@lru_cache(maxsize=32)
+def resolution_target(resolution):
+    """Invert H3's short-edge/ratio policy, including its 32px rounding."""
+    width, height = resolution
+    if (width - 16) * (height - 16) > 768 * 1344:
+        raise base.BatchError("指定尺寸超过H3原生画布像素上限")
+    for ratio in sorted(RATIOS, key=lambda r: abs(math.log(
+            (int(r.split(":")[0]) / int(r.split(":")[1])) / (width / height)))):
+        rw, rh = map(int, ratio.split(":"))
+        fw, fh = rw / min(rw, rh), rh / min(rw, rh)
+        # Matching either axis before rounding gives stable, small candidates.
+        candidates = [min(width, height), round(width / fw), round(height / fh)]
+        candidates.extend(range(max(1, min(width, height) - 16), min(width, height) + 17))
+        for edge in dict.fromkeys(candidates):
+            if edge <= 0:
+                continue
+            w, h = edge * fw, edge * fh
+            scale = min(1.0, math.sqrt((768 * 1344) / (w * h)))
+            actual = (max(32, round(w * scale / 32) * 32),
+                      max(32, round(h * scale / 32) * 32))
+            if actual == resolution:
+                return edge, ratio
+    raise base.BatchError(f"H3支持的比例和画布规则无法精确生成{width}x{height}；"
+                          "可使用480x832、768x1344等尺寸")
 
 
 @lru_cache(maxsize=512)
@@ -149,6 +191,7 @@ def load_cases(args):
     if not metadata.is_file():
         raise base.BatchError(f"metadata 不存在: {metadata}；运行 python3 scripts/prepare_ref2va_metadata.py")
     cases, names, references, prompts = [], set(), {}, {}
+    target = resolution_target(args.resolution) if args.resolution else None
     with metadata.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         required = {"id", args.input_column, "reference_video", "cat_id",
@@ -207,6 +250,9 @@ def load_cases(args):
                 raise base.BatchError("H3 当前输出固定 24fps；metadata.fps 应为24")
             case = Case(index, number, name, prompt, image, None, seconds, seed, row,
                         ref, row["cat_id"], row["motion_id"], row["motion_slug"], ratio, "")
+            if target:
+                case = replace(case, target_short_edge=target[0], aspect_ratio=target[1],
+                               resolution=args.resolution)
             # Hash content and sampling settings, excluding deployment paths and transport.
             identity = build_request(case, args, preview=True)
             for condition in identity["conditions"]:
@@ -254,7 +300,7 @@ def build_request(case, args, *, preview=False):
             item["source_path"] = str(source)
     result = {"prompt": case.prompt, "task": "ref2va", "seconds": case.duration_seconds,
               "conditions": conditions,
-              "target": {"short_edge": 768, "aspect_ratio": case.aspect_ratio,
+              "target": {"short_edge": case.target_short_edge, "aspect_ratio": case.aspect_ratio,
                          "duration_seconds": case.duration_seconds},
               "num_outputs_per_prompt": 1, "num_inference_steps": args.num_inference_steps,
               "flow_shift": args.flow_shift, "audio_flow_shift": args.audio_flow_shift,
@@ -276,6 +322,7 @@ def state_payload(case, paths, **kwargs):
             "reference_video": str(case.reference_video), "cat_id": case.cat_id,
             "motion_id": case.motion_id, "motion_slug": case.motion_slug,
             "request_fingerprint": case.request_fingerprint,
+            "resolution": list(case.resolution) if case.resolution else None,
             "prompt_version": case.source_row.get("prompt_version"),
             "prompt_status": case.source_row.get("prompt_status")}
 
@@ -285,6 +332,8 @@ def log_case_configuration(args, cases):
     base.log("猫图身份reference + 静音video动作reference；无尾帧；"
              + ("已显式启用首帧keyframe" if args.lock_first_frame
                 else "首帧构图由提示词引导，不硬锁第0帧"))
+    if args.resolution:
+        base.log(f"原生生成分辨率: {args.resolution[0]}x{args.resolution[1]}；不做后处理缩放")
     for case in cases[:3]:
         base.log(f"输出: {case_paths(args.output_dir, case).video}")
 
@@ -326,6 +375,17 @@ def wait_for_result(client, case, paths, args, video_id):
         client.pause(args.poll_interval)
 
 
+def verify_output_resolution(case, path):
+    if case.resolution is None:
+        return
+    stream = video_stream(path)
+    actual = (int(stream["width"]), int(stream["height"]))
+    if actual != case.resolution:
+        raise base.BatchError(f"服务实际输出{actual[0]}x{actual[1]}，"
+                              f"请求为{case.resolution[0]}x{case.resolution[1]}；"
+                              "未标记完成，也未缩放视频。请确认服务已按指定分辨率入口重新启动")
+
+
 def run_case(case, args, client):
     paths = case_paths(args.output_dir, case)
     previous = {} if args.force else (base.read_json(paths.state) or {})
@@ -341,6 +401,7 @@ def run_case(case, args, client):
     if args.write_requests:
         base.atomic_write_json(paths.request_preview, build_request(case, args, preview=True))
     if base.looks_like_mp4(paths.video):
+        verify_output_resolution(case, paths.video)
         base.log(f"[{case.name}] 已存在且参数一致，跳过")
         return {**previous, **state_payload(case, paths, status="completed",
                 video_id=previous.get("video_id"), server_url=previous.get("server_url")),
@@ -377,6 +438,7 @@ def run_case(case, args, client):
                                video_id=video_id, server_url=client.server_url, server_response=response))
         terminal = wait_for_result(client, case, paths, args, video_id)
     client.download(video_id, paths.video)
+    verify_output_resolution(case, paths.video)
     result = state_payload(case, paths, status="completed", video_id=video_id,
                            server_url=client.server_url, server_response=terminal)
     base.atomic_write_json(paths.state, result)
