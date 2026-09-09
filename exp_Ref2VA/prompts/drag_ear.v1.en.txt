@@ -1,0 +1,30 @@
+subject_definitions:
+<Subject 1> is the individual cat in <Picture 1>. Its identity, facial proportions, eyes, nose, natural ear shape, coat or bare skin, body proportions, and tail all come from that image.
+<Subject 2> is the studio environment in <Picture 1>, including the background, floor, lighting, contact shadow, and camera viewpoint.
+<Subject 3> is the cat's self-grooming movement in <Video 1>: raising its own left forepaw on the viewer's right, touching the left ear and side of the head, drawing the paw downward over the face, and lowering it to the floor while seated.
+<Picture 1> is the exact first frame of [Shot 1] at 0.00 seconds, establishing <Subject 1>, <Subject 2>, and their composition.
+<Video 1> is the four-second motion reference derived from Ref_drag_ear.mp4. Its visual track supplies the order, direction, timing, and restrained amplitude of <Subject 3>.
+
+summary:
+[keyframe completion + reference generation] Generate a four-second, single-shot video beginning from <Picture 1>. Animate <Subject 1> in <Subject 2> with <Subject 3>, following the movement phases and pacing of <Video 1>. The cat raises its own left forepaw, brushes its left ear and face, lowers the paw, and settles into a natural seated posture.
+
+retention_analysis:
+<Subject 1> (appears throughout [Shot 1]): fully_preserved - preserve this individual cat's visible identity and natural anatomy throughout the new movement, including any folded or curled ears, short tail, long coat, or bare skin present in the image.
+<Subject 2> (appears throughout [Shot 1]): fully_preserved - maintain the input image's background, floor, lighting, scale, viewpoint, and stable contact with the floor.
+<Subject 3> (appears during the central action in [Shot 1]): attribute_transfer - transfer the reference cat's left-forepaw grooming path, coordinated head movement, and return to a seated rest onto <Subject 1>, adapting contact to its own ear shape and body proportions.
+<Picture 1> ([Shot 1] first frame): fully_preserved - use the image as the opening frame at 0.00 seconds; the following frames develop continuously into the referenced action.
+<Video 1> (action sequence and pacing in [Shot 1]): fully_preserved - retain the visual movement's temporal order and screen direction. Its source cat's appearance, studio backdrop, and audio are outside this reference role.
+
+detailed_description:
+The target video retains the photographic appearance and soft studio lighting of <Picture 1>, with realistic feline anatomy and continuous movement. The camera holds a static shot for the full four seconds.
+[Shot 1] The shot begins from <Picture 1> at 0.00 seconds. <Subject 1>, the same individual cat with the exact face, eyes, natural ears, coat or skin, body proportions, and tail visible in the first frame, sits in <Subject 2>. Preserve its position and scale in the frame, the space around its head and paws, the floor beneath it, and the background's color and illumination. Both forepaws initially support its upright seated posture. Its hindquarters remain grounded, with the tail resting naturally as established by the image.
+During approximately the first second, the cat breathes subtly and makes the small blink and ear adjustment seen in the opening phase of <Video 1>. Its body remains recognizably the same cat. The shoulder, elbow, wrist, and paw then begin <Subject 3> in a connected anatomical movement: the cat lifts its own left forepaw, visible on the viewer's right. The right forepaw stays planted as support while the left elbow bends and the paw travels upward beside the left side of the head. No person, human hand, or additional animal enters the frame.
+Around 1.3 to 1.8 seconds, follow <Video 1> as the raised left paw reaches the left ear and upper side of the head. The paw makes a brief, gentle brushing contact; the ear yields only within the limits of this cat's existing ear shape. Its head tilts slightly with the contact, and its eyelids narrow naturally. Keep the same paw attached to the same foreleg throughout this arc. The movement belongs to the cat's self-grooming action, without a separate hand gripping its ear or an exaggerated stretch of the ear.
+Through approximately 1.8 to 2.6 seconds, the left paw moves forward and downward across the side of the face toward the muzzle and chest, following the reference's curved path. The cat briefly dips its head toward the descending paw, then begins to raise its gaze. Its torso makes only the small balancing adjustment visible in the motion reference. Soft brushing sounds coincide with contact against fur or skin, with quiet room ambience underneath.
+By approximately 3.0 seconds, the left paw returns to the floor beside the supporting right paw. Through the final second, the cat settles into the relaxed forward-facing seated state shown at the end of <Video 1>, with tiny breathing and eye movements. Reach that resting state continuously from the action; the final pose need not duplicate the opening image pixel for pixel. Preserve the individual's identity, lighting, and grounded body throughout the settling motion. A faint paw contact is audible on landing, with no speech or vocal performance.
+
+overall_soundscape:
+Quiet studio room tone continues under faint natural brushing against fur or skin and a soft paw contact with the floor. Generate these subdued physical sounds with the new action; the reference video's original audio is not reused.
+
+non_diegetic_music:
+N/A

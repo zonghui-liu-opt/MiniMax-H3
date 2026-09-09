@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "motions": [
+    {
+      "motion_id": "02-pull-left-ear",
+      "motion_slug": "drag_ear",
+      "motion_name_zh": "左前爪轻擦左耳与脸部后恢复坐姿",
+      "reference_video": "Ref_drag_ear.mp4",
+      "prompt_file": "prompts/drag_ear.v1.en.txt",
+      "duration_seconds": 4,
+      "reference_duration_seconds": 4,
+      "fps": 24,
+      "prompt_version": "drag_ear.v1",
+      "prompt_status": "pending_model_validation",
+      "source_observation": "Reviewed 16 frames at 4 fps: seated tabby lifts its own left forepaw (viewer right), touches the left ear/head side, sweeps down across its face, lowers the paw, and resumes sitting. Original video is 4 seconds, 24 fps, 720x1280, with an audio track."
+    }
+  ]
+}

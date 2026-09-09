@@ -1,0 +1,12 @@
+videos/
+requests/
+states/
+services/
+logs/
+history/
+bundle/
+prepared/
+preflight.json
+*.manifest.json
+manifest.json
+.*.lock

@@ -127,7 +127,7 @@ def server_commands(args):
             "--performance-mode", "speed", "--host", "127.0.0.1",
             "--port", str(ports["HTTP"]), "--master-port", str(ports["master"]),
             "--scheduler-port", str(ports["scheduler"]),
-            "--model-variant", "fl2va", *args.server_arg,
+            "--model-variant", getattr(args, "model_variant", "fl2va"), *args.server_arg,
         ]))
     return commands, list(port_owners)
 
@@ -170,9 +170,9 @@ def print_server_log_tails(log_paths):
             batch.log(f"无法读取服务日志 {path}: {exc}")
 
 
-def prepare(args, urls):
+def prepare(args, urls, *, backend=batch):
     """Validate every row and route unfinished IDs to their original server."""
-    batch.validate_args(args)
+    backend.validate_args(args)
     datasets = []
     shared = queue.Queue()
     pinned = {url: queue.Queue() for url in urls}
@@ -185,13 +185,14 @@ def prepare(args, urls):
     for metadata in metadata_paths:
         options = argparse.Namespace(**vars(args))
         options.metadata = metadata
-        options.output_dir = args.output_dir / metadata.stem
-        cases = batch.load_cases(options)
+        options.output_dir = (args.output_dir if getattr(args, "flat_output", False)
+                              else args.output_dir / metadata.stem)
+        cases = backend.load_cases(options)
         if not args.dry_run:
-            batch.log_case_configuration(options, cases)
+            backend.log_case_configuration(options, cases)
         datasets.append((options, cases))
         for case in cases:
-            paths = batch.case_paths(options.output_dir, case)
+            paths = backend.case_paths(options.output_dir, case)
             previous = {} if args.force else (batch.read_json(paths.state) or {})
             job = (options, case)
             if not args.force and previous.get("video_id") and not batch.looks_like_mp4(paths.video):
@@ -210,7 +211,13 @@ def prepare(args, urls):
     return datasets, shared, pinned
 
 
-def run_work(args, clients, datasets, shared, pinned, stop_event):
+def dataset_manifest_path(options):
+    name = (f"{options.metadata.stem}.manifest.json" if getattr(options, "flat_output", False)
+            else "manifest.json")
+    return options.output_dir / name
+
+
+def run_work(args, clients, datasets, shared, pinned, stop_event, *, backend=batch):
     started = time.monotonic()
     results = {str(options.metadata): [] for options, _ in datasets}
     lock = threading.Lock()
@@ -225,7 +232,7 @@ def run_work(args, clients, datasets, shared, pinned, stop_event):
                 except queue.Empty:
                     return
             options, case = job
-            paths = batch.case_paths(options.output_dir, case)
+            paths = backend.case_paths(options.output_dir, case)
             case_started = time.monotonic()
             previous = {} if options.force else (batch.read_json(paths.state) or {})
             previous_id = previous.get("video_id")
@@ -236,13 +243,14 @@ def run_work(args, clients, datasets, shared, pinned, stop_event):
                 options = argparse.Namespace(**vars(options))
                 options.force = True
             try:
-                result = batch.run_case(case, options, client)
+                result = backend.run_case(case, options, client)
             except Exception as exc:
                 previous = batch.read_json(paths.state) or previous
                 result = {
                     **previous,
-                    **batch.state_payload(
-                        case, paths, status="interrupted" if stop_event.is_set() else "failed",
+                    **backend.state_payload(
+                        case, paths, status=("submission_unknown" if previous.get("status") == "submission_unknown"
+                                            else "interrupted" if stop_event.is_set() else "failed"),
                         video_id=previous.get("video_id"), server_url=client.server_url,
                         error=str(exc)),
                 }
@@ -277,7 +285,7 @@ def run_work(args, clients, datasets, shared, pinned, stop_event):
             "failures": [{"name": item["name"], "error": item.get("error")}
                          for item in failed],
         }
-        batch.atomic_write_json(options.output_dir / "manifest.json", manifest)
+        batch.atomic_write_json(dataset_manifest_path(options), manifest)
         manifests.append(manifest)
     elapsed = time.monotonic() - started
     generated = sum(item["status"] == "completed" and not item.get("skipped_existing")
@@ -292,7 +300,7 @@ def run_work(args, clients, datasets, shared, pinned, stop_event):
         "completed": sum(m["completed"] for m in manifests),
         "failed": sum(m["failed"] for m in manifests),
         "pending": sum(m["pending"] for m in manifests),
-        "manifests": [str(options.output_dir / "manifest.json") for options, _ in datasets],
+        "manifests": [str(dataset_manifest_path(options)) for options, _ in datasets],
     }
     batch.atomic_write_json(args.output_dir / "manifest.json", summary)
     batch.log(f"推理结束: {summary}")
@@ -317,7 +325,7 @@ def stop_servers(processes):
         process.wait()
 
 
-def run(args, stop_event):
+def run(args, stop_event, *, backend=batch):
     args.output_dir = args.output_dir.expanduser().resolve()
     if args.startup_timeout <= 0 or args.tp_size <= 0 or args.ulysses_degree <= 0:
         raise batch.BatchError("startup-timeout、tp-size 和 ulysses-degree 必须大于 0")
@@ -332,7 +340,7 @@ def run(args, stop_event):
     if args.serve_only:
         batch.log(f"服务模式：启动 {len(clients)} 个副本，不读取 CSV、不提交推理任务")
     else:
-        datasets, shared, pinned = prepare(args, urls)
+        datasets, shared, pinned = prepare(args, urls, backend=backend)
         batch.log(f"{sum(len(cases) for _, cases in datasets)} 个 case，{len(clients)} 个副本，"
                   f"每副本 {args.max_concurrency} 个在途请求；输出: {args.output_dir}")
         if not commands:
@@ -343,8 +351,11 @@ def run(args, stop_event):
     if args.dry_run:
         if not args.serve_only:
             for options, _ in datasets:
-                batch.run_batch(options)
+                backend.run_batch(options)
         return 0
+
+    if hasattr(backend, "validate_runtime"):
+        backend.validate_runtime(args)
 
     processes = []
     log_paths = []
@@ -399,11 +410,15 @@ def run(args, stop_event):
                     make_client(client.server_url, args, stop_event, probe=True).check_server()
                 except batch.ApiError as exc:
                     raise batch.BatchError(
-                        f"服务不可用: {client.server_url}；请先运行 bash serve_smoke_8gpu.sh "
+                        f"服务不可用: {client.server_url}；请先运行 bash "
+                        f"{getattr(args, 'serve_entrypoint', 'serve_smoke_8gpu.sh')} "
                         "并等待服务就绪，或用 --server-urls 指定已有服务。"
                         f"本次未启动模型。详情: {exc}") from exc
+        if hasattr(backend, "validate_servers"):
+            backend.validate_servers(args, clients)
         if args.serve_only:
-            batch.log(f"全部服务就绪: {urls}；可在另一终端运行 bash infer_smoke_8gpu.sh。"
+            batch.log(f"全部服务就绪: {urls}；可在另一终端运行 bash "
+                      f"{getattr(args, 'infer_entrypoint', 'infer_smoke_8gpu.sh')}。"
                       "服务持续运行；在本服务终端按 Ctrl-C 停止。")
             while not stop_event.wait(.5):
                 for index, process in enumerate(processes):
@@ -411,7 +426,7 @@ def run(args, stop_event):
                         raise batch.BatchError(f"服务 {urls[index]} 已退出 ({process.returncode})；"
                                                f"日志: {log_paths[index]}")
             return 0
-        return run_work(args, clients, datasets, shared, pinned, stop_event)
+        return run_work(args, clients, datasets, shared, pinned, stop_event, backend=backend)
     except (batch.BatchError, OSError):
         print_server_log_tails(log_paths)
         raise
@@ -419,8 +434,8 @@ def run(args, stop_event):
         stop_servers(processes)
 
 
-def main(argv=None):
-    args = build_parser().parse_args(argv)
+def main(argv=None, *, parser=None, backend=batch):
+    args = (parser or build_parser()).parse_args(argv)
     stop_event = threading.Event()
     old_handlers = {}
     for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
@@ -428,6 +443,8 @@ def main(argv=None):
     try:
         # An OS lock releases automatically on crash; stale lock files are safe.
         args.output_dir = args.output_dir.expanduser().resolve()
+        if args.dry_run and not getattr(args, "write_requests", True):
+            return run(args, stop_event, backend=backend)
         lock_dir = args.service_dir.expanduser().resolve() if args.serve_only else args.output_dir
         lock_dir.mkdir(parents=True, exist_ok=True)
         lock_name = ".service.lock" if args.serve_only else ".inference.lock"
@@ -438,7 +455,7 @@ def main(argv=None):
                 message = ("已有服务管理进程使用该 service-dir" if args.serve_only
                            else "已有推理进程正在写入该输出目录")
                 raise batch.BatchError(message) from exc
-            return run(args, stop_event)
+            return run(args, stop_event, backend=backend)
     except (batch.BatchError, OSError) as exc:
         batch.log(f"错误: {exc}")
         return 130 if stop_event.is_set() else 2
