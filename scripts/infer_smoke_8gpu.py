@@ -354,9 +354,6 @@ def run(args, stop_event, *, backend=batch):
                 backend.run_batch(options)
         return 0
 
-    if hasattr(backend, "validate_runtime"):
-        backend.validate_runtime(args)
-
     processes = []
     log_paths = []
     try:
@@ -414,8 +411,6 @@ def run(args, stop_event, *, backend=batch):
                         f"{getattr(args, 'serve_entrypoint', 'serve_smoke_8gpu.sh')} "
                         "并等待服务就绪，或用 --server-urls 指定已有服务。"
                         f"本次未启动模型。详情: {exc}") from exc
-        if hasattr(backend, "validate_servers"):
-            backend.validate_servers(args, clients)
         if args.serve_only:
             batch.log(f"全部服务就绪: {urls}；可在另一终端运行 bash "
                       f"{getattr(args, 'infer_entrypoint', 'infer_smoke_8gpu.sh')}。"

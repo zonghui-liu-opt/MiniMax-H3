@@ -10,7 +10,7 @@
 # 全量输入检查：不创建缓存或请求预览，不访问模型服务
 bash infer_ref2va_8gpu.sh --dry-run
 
-# 自动准备静音缓存、检查环境、启动服务、推理下载、关闭本次服务
+# 自动准备静音缓存、启动服务、推理下载、关闭本次服务
 bash infer_ref2va_8gpu.sh --start-servers \
   --model-path /srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3
 ```
@@ -24,28 +24,13 @@ bash infer_ref2va_8gpu.sh --start-servers \
 | 1 | 0,1,2,3 | 30110 | 30111 | 31110 | 32110 |
 | 2 | 4,5,6,7 | 30112 | 30113 | 31111 | 32111 |
 
-默认每服务一个在途任务。可用 `--server-urls` 连接已有服务，或用 `--gpu-groups`、`--tp-size`、`--ulysses-degree` 和端口参数调整部署。服务设置名称标识 `minimax-h3-ref2va`；自建服务未设置标识时，确认Ref2VA分区后可传 `--allow-unmarked-server`。名称检查不能代替正确权重部署。
+默认每服务一个在途任务。可用 `--server-urls` 连接已有Ref2VA服务，或用 `--gpu-groups`、`--tp-size`、`--ulysses-degree` 和端口参数调整部署。
 
-## 环境一次备齐
+## 沿用现有环境
 
-- 客户端：Python ≥3.10，仅标准库；PATH 中有 `ffmpeg`、`ffprobe`。服务端ffmpeg需有libx264与AAC编码器。
-- 模型：完整原始 `MiniMax-H3/Ref2VA/`，包含专用transformer、text_encoder、VAE、processor、tokenizer及配置，合计29个权重文件。`--model-path` 传父目录，不能传 `Ref2VA` 子目录或FL2VA权重。
-- SGLang：本工程核实版本为 `0.5.19`，`0.5.18` 缺少Ref2VA首帧混合支持。激活与 `sglang` 命令一致的Python环境；预检检查实际安装源码的支持情况。
+在已经跑通FL2VA的环境执行，启动方式复用 `serve_smoke_8gpu.sh` 的调度器，模型参数使用 `--model-variant ref2va`。不检查包版本、解析安装源码、扫描权重头、预检编码器或要求自定义服务名称；SGLang直接加载模型并报告实际错误。无需为本次修正安装指定版本或搬运wheel包。
 
-```bash
-# 只检查环境，不启动GPU；自动启动也执行同样预检
-bash infer_ref2va_8gpu.sh --preflight-only \
-  --model-path /srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3
-
-# 缺模型时，在联网环境下载固定完整分区，再同步至推理机模型目录
-hf download MiniMaxAI/MiniMax-H3 \
-  --revision 42ed227ee7df40d41602854ae760620d6eb651fe \
-  --include 'Ref2VA/**' --local-dir /path/to/models/MiniMax-H3
-```
-
-预检一次汇总缺分片、LFS指针/截断、依赖、编码器和接口支持问题，在加载GPU前报错。入口开启Hub离线模式，不在内网临时拉权重。
-
-缺依赖时，在与推理机相同Linux/Python/CUDA环境的副本中准备 `sglang[diffusion]==0.5.19`。需要离线安装时，联网准备机执行 `pip download --only-binary=:all: --dest /path/to/wheels 'sglang[diffusion]==0.5.19'`，内网执行 `pip install --no-index --find-links=/path/to/wheels 'sglang[diffusion]==0.5.19'`。先验证该组合，保留已跑通的FL2VA环境；Mac wheels不能用于Linux。模型、环境和依赖不提交Git，预检不能替代CUDA兼容性及实际GPU验证。
+`--model-path` 传含完整 `Ref2VA/` 分区的模型根目录，不能传 `Ref2VA` 子目录或FL2VA分区。入口保持Hub离线模式。批量客户端使用Python标准库和现有 `ffmpeg`、`ffprobe`；静音缓存通过 `-c:v copy -an` 复制视频轨道，不需要libx264重新编码。只启动server不处理这些素材。
 
 ## 输入、提示词与命名
 
@@ -59,7 +44,11 @@ videos/drag_ear/000_00-orange-shorthair-mackerel-tabby_02-pull-left-ear_seed-0.m
 
 `drag_ear.v1` 使用[官方六段格式](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md)。参考动作是猫用自己的左前爪（画面右侧）触左耳/头侧、向下擦脸、落爪恢复坐姿。身份、自然耳型、毛色/皮肤和场景来自首帧；无尾帧锁定。
 
-请求固定 `task=ref2va`，按顺序提交首帧 `image/keyframe, frame_index=0`、同图 `image/reference`、静音 `video/reference`。重复同图用于提供 `<Picture 1>`：Ref2VA文本编码不会给keyframe分配图片参考标签。视频含原音轨会自动引入音频参考，因此必须去音轨。源猫图480×832采用最近合法比例9:16；15:26不被接受，auto会回落为横屏。接口来源：[SGLang H3文档](https://docs.sglang.io/cookbook/diffusion/MiniMax/MiniMax-H3)。
+请求固定 `task=ref2va`，默认按顺序提交猫图 `image/reference` 和静音 `video/reference`，分别对应 `<Picture 1>` 的身份/场景和 `<Video 1>` 的动作。提示词引导开头构图，但默认不硬锁第0帧。原提示词、80只猫、240条metadata及输出命名继续使用。
+
+需要接口层首帧约束且服务支持混合条件时，推理命令可显式加 `--lock-first-frame`：额外提交同图 `image/keyframe, frame_index=0`，保留身份reference以提供 `<Picture 1>`。不检测版本、不修改SGLang、不自动降级；服务不支持时保留实际错误。切换此选项会改变请求指纹，避免误复用旧结果。
+
+视频含原音轨会自动引入音频参考，因此去除音轨。源猫图480×832采用最近合法比例9:16；15:26不被接受，auto会回落为横屏。接口来源：[SGLang H3文档](https://docs.sglang.io/cookbook/diffusion/MiniMax/MiniMax-H3)。
 
 默认50步、768短边、4秒请求、24fps、flow_shift=12、audio_flow_shift=3。模型帧数按17n+5对齐，实际MP4可能长于4秒；保留原始输出。提示词仍为 `pending_model_validation`，尚未在H100上验证动作与ID保持效果。
 
@@ -84,4 +73,4 @@ bash infer_ref2va_8gpu.sh --metadata exp_Ref2VA/metadata_subset.csv
 
 `--retry-failed` 重提明确失败任务；轮询超时保留ID。POST响应丢失标记 `submission_unknown`，检查服务日志后再决定重跑，避免重复占用GPU。`--force` 会把旧结果归档至忽略的 `history/` 再重新生成。输出目录使用进程锁。成功退出0、部分失败1、配置错误2、中断130。
 
-回归测试：`python3 -m unittest discover -s tests -q`。模拟服务测试覆盖三条件请求、命名、双副本、恢复与失败重试，不代表真实H100生成质量。
+回归测试：`python3 -m unittest discover -s tests -q`。模拟服务测试覆盖默认双参考请求、可选首帧约束、服务启动、命名、双副本、恢复与失败重试，不代表真实H100生成质量。

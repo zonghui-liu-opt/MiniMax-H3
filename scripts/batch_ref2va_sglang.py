@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Ref2VA backend for the shared, resumable two-replica H3 runner.
 
-Only the Python standard library and ffprobe are needed by this client.
-Keyframes do not receive Picture labels in H3's reference text encoder, so the
-first image is also supplied as an identity reference, before the motion video.
+The client uses the Python standard library, ffmpeg and ffprobe.
+The cat image supplies identity and the silent video supplies motion. A hard
+first-frame keyframe is optional, because standard Ref2VA uses references only.
 """
 from __future__ import annotations
 
@@ -240,12 +240,17 @@ def build_request(case, args, *, preview=False):
 
     first_uri = uri(case.first_image, base.IMAGE_MIME_TYPES[case.first_image.suffix.lower()])
     conditions = [
-        {"type": "image", "uri": first_uri, "role": "keyframe", "frame_index": 0},
         {"type": "image", "uri": first_uri, "role": "reference"},
         {"type": "video", "uri": uri(case.reference_video, "video/mp4"), "role": "reference"},
     ]
+    sources = [case.first_image, case.reference_video]
+    if args.lock_first_frame:
+        # Keyframes do not receive Picture labels, so retain the image reference.
+        conditions.insert(0, {"type": "image", "uri": first_uri,
+                              "role": "keyframe", "frame_index": 0})
+        sources.insert(0, case.first_image)
     if preview:
-        for item, source in zip(conditions, (case.first_image, case.first_image, case.reference_video)):
+        for item, source in zip(conditions, sources):
             item["source_path"] = str(source)
     result = {"prompt": case.prompt, "task": "ref2va", "seconds": case.duration_seconds,
               "conditions": conditions,
@@ -277,7 +282,9 @@ def state_payload(case, paths, **kwargs):
 
 def log_case_configuration(args, cases):
     base.log(f"Ref2VA metadata: {args.metadata.resolve()}；{len(cases)} 条，seed逐行读取CSV")
-    base.log(f"首帧keyframe + 同图身份reference + 静音video reference；50步默认；无尾帧")
+    base.log("猫图身份reference + 静音video动作reference；无尾帧；"
+             + ("已显式启用首帧keyframe" if args.lock_first_frame
+                else "首帧构图由提示词引导，不硬锁第0帧"))
     for case in cases[:3]:
         base.log(f"输出: {case_paths(args.output_dir, case).video}")
 
@@ -375,35 +382,3 @@ def run_case(case, args, client):
     base.atomic_write_json(paths.state, result)
     base.log(f"[{case.name}] 完成: {paths.video}")
     return result
-
-
-def validate_runtime(args):
-    import ref2va_preflight
-    report = ref2va_preflight.preflight(args)
-    ref2va_preflight.print_report(report)
-    base.atomic_write_json(args.output_dir / "preflight.json", report)
-    if not report["ok"]:
-        raise base.BatchError("Ref2VA环境预检未通过；全部缺项见上述报告，尚未启动GPU模型")
-
-
-def validate_servers(args, clients):
-    for client in clients:
-        info = client.check_server()
-        # Server versions expose different model metadata. Reject an explicit
-        # FL2VA selection; absence is recorded and the documented request remains
-        # the authoritative check, rather than inventing a capabilities endpoint.
-        variant = info.get("model_variant") or info.get("variant")
-        if variant and str(variant).lower() not in ("ref2va", "hybrid"):
-            raise base.BatchError(f"{client.server_url} 运行的是 {variant}，请启动Ref2VA服务")
-        try:
-            server_info = client.request_json("GET", "/server_info")
-        except base.ApiError as exc:
-            if exc.status_code != 404:
-                raise
-            server_info = {}
-        name = server_info.get("served_model_name")
-        if name != "minimax-h3-ref2va" and not args.allow_unmarked_server:
-            raise base.BatchError(f"{client.server_url} 未返回本工程Ref2VA服务标识；"
-                                  "请用 serve_ref2va_8gpu.sh 启动，或在确认其Ref2VA分区后"
-                                  "显式 --allow-unmarked-server。此检查不提交推理任务")
-        base.log(f"Ref2VA服务: {client.server_url}；model_variant={variant or '未由 /models 暴露'}")
