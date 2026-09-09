@@ -1,0 +1,29 @@
+subject_definitions:
+<Subject 1> is the individual cat in <Picture 1>, which supplies its identity: facial proportions, eyes, nose, natural ears, coat pattern or bare skin, body build, and tail anatomy.
+<Subject 2> is the studio environment in <Picture 1>, which supplies the background, floor, lighting, contact shadows, camera viewpoint, and initial framing.
+<Subject 3> is the feline movement in <Video 1>: lowering the head from a sit, flexing the forelegs and curving the torso toward screen-right, settling the body onto the floor in a compact curl, and resting the head low at screen-right with the hindquarters at screen-left.
+<Video 1> is the silent visual reference derived from Ref_curl_up_and_lie_down_mirror.mp4. It supplies the action sequence, screen direction, relative timing, and ending state for the four-second target shot.
+
+summary:
+[reference generation] Generate a four-second single-shot studio video of <Subject 1> in <Subject 2>, transferring <Subject 3> from <Video 1>. Follow the observed movement through its distinct ending state.
+
+retention_analysis:
+<Subject 1> (appears throughout [Shot 1]): fully_preserved - maintain this cat's identity, including asymmetrical markings, folded or curled ears, short or absent tail, long fur, or bare skin. Adapt movement to its natural proportions; never mirror the identity image or substitute the reference cat's markings.
+<Subject 2> (appears throughout [Shot 1]): fully_preserved - retain the image's studio setting, floor plane, fixed viewpoint, and lighting; body position, silhouette, scale, and shadows evolve naturally with the action.
+<Subject 3> (appears during [Shot 1]): attribute_transfer - transfer the observed movement to <Subject 1>, preserving the stated direction, support changes, contact sequence, and final pose.
+<Video 1> (movement timing and ending state in [Shot 1]): fully_preserved - preserve the reference's single-shot temporal structure and directional action within four seconds. The source cat's identity, backdrop, and soundtrack are outside this role.
+
+detailed_description:
+The target video has the photographic studio appearance of <Picture 1>, with soft illumination, realistic feline anatomy, and continuous movement. The camera remains fixed for the entire four-second shot.
+[Shot 1] At the opening, <Subject 1> sits facing the camera in <Subject 2>, following the cat image's initial placement and scale. Keep its distinctive face, eye colors, natural ears, coat or skin, body build, and tail recognizable as it moves. The floor stays stable beneath it, and the contact shadow responds to each change in support. The image provides identity and scene guidance; the posture is free to develop into <Subject 3> from <Video 1>.
+During approximately 00:00.000 to 00:01.000, <Subject 1> remains seated as in the opening of <Video 1>. The eyelids soften, the head gradually bows, and the neck shortens naturally as the gaze drops toward the forepaws. Keep the shoulders connected to the torso and the hindquarters grounded. This relaxed preparation leads into <Subject 3> without a sudden change of position.
+Between roughly 00:01.000 and 00:01.800, the head and shoulders incline toward screen-right. Flex the forelegs and make the small inward paw adjustments shown in the reference as the chest approaches the floor. The spine rounds into a shallow curve and the body turns only far enough to settle into the compact resting shape. The cat's weight transfers progressively from upright foreleg support to its folded limbs and torso.
+From about 00:01.800 to 00:02.700, lower the chest fully and bring the hindquarters around toward screen-left. The forepaws tuck beneath or just in front of the muzzle as the whole body settles onto the floor. The head comes to rest low at screen-right, the rump forms the rounded outer side at screen-left, and the tail follows the body into its natural resting position. Preserve the actual tail anatomy from <Picture 1>: a short-tailed or tailless cat reaches the same body curl using the tail it has. Keep the movement a grounded lowering and curling sequence, with a soft fur or skin rustle against the floor.
+From approximately 00:02.700 through 00:04.000, the cat rests in the completed compact curl, eyes closed or nearly closed and head lowered onto the forepaws. The silhouette is wider and much lower than the opening upright sit. Maintain that sleeping posture with small breathing motion, a stable floor contact, and consistent lighting on the curved back. The cat stays curled and lying down at the end.
+Keep the action continuous through the final frame at approximately 00:04.000. Preserve the final state described above with subtle breathing and small natural eye movements, without restarting the action or returning to the opening pose. Maintain a single coherent body with attached limbs, anatomically plausible joints, and consistent scale in perspective. No person, visible human hand, extra cat, text, or graphic overlay enters the studio. Quiet room tone accompanies restrained, synchronized sounds from the described movement; there is no speech or vocal performance.
+
+overall_soundscape:
+Quiet studio room tone with faint paw contacts, body or fur movement, and subdued toy sounds where a toy is present. Generate soft physical sounds synchronized with the new action. The original reference audio is removed and is not reused.
+
+non_diegetic_music:
+N/A

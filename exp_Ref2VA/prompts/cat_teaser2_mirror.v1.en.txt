@@ -1,0 +1,31 @@
+subject_definitions:
+<Subject 1> is the individual cat in <Picture 1>, which supplies its identity: facial proportions, eyes, nose, natural ears, coat pattern or bare skin, body build, and tail anatomy.
+<Subject 2> is the studio environment in <Picture 1>, which supplies the background, floor, lighting, contact shadows, camera viewpoint, and initial framing.
+<Subject 3> is the feline movement in <Video 1>: tracking a feather wand at screen-left, rising from a sit, reaching its own left forepaw diagonally across the front of its chest to bat the toy, taking a short step toward screen-left, and finishing standing on all four paws.
+<Subject 4> is the teaser in <Video 1>: a thin dark rod entering from screen-left with a small blue, yellow, red, and orange feather cluster at its tip. The toy supplies the target for the rising and batting movement.
+<Video 1> is the silent visual reference derived from Ref_cat_teaser2_mirror.mp4. It supplies the action sequence, screen direction, relative timing, and ending state for the four-second target shot.
+
+summary:
+[reference generation] Generate a four-second single-shot studio video of <Subject 1> in <Subject 2>, transferring <Subject 3> from <Video 1>. Include <Subject 4> as the visible interaction target. Follow the observed movement through its distinct ending state.
+
+retention_analysis:
+<Subject 1> (appears throughout [Shot 1]): fully_preserved - maintain this cat's identity, including asymmetrical markings, folded or curled ears, short or absent tail, long fur, or bare skin. Adapt movement to its natural proportions; never mirror the identity image or substitute the reference cat's markings.
+<Subject 2> (appears throughout [Shot 1]): fully_preserved - retain the image's studio setting, floor plane, fixed viewpoint, and lighting; body position, silhouette, scale, and shadows evolve naturally with the action.
+<Subject 3> (appears during [Shot 1]): attribute_transfer - transfer the observed movement to <Subject 1>, preserving the stated direction, support changes, contact sequence, and final pose.
+<Subject 4> (appears throughout the interaction in [Shot 1]): fully_preserved - reproduce the reference toy's recognizable appearance and continuous path, scaling it sensibly to the target cat while keeping contact physically coherent.
+<Video 1> (movement timing and ending state in [Shot 1]): fully_preserved - preserve the reference's single-shot temporal structure and directional action within four seconds. The source cat's identity, backdrop, and soundtrack are outside this role.
+
+detailed_description:
+The target video has the photographic studio appearance of <Picture 1>, with soft illumination, realistic feline anatomy, and continuous movement. The camera remains fixed for the entire four-second shot.
+[Shot 1] At the opening, <Subject 1> sits facing the camera in <Subject 2>, following the cat image's initial placement and scale. Keep its distinctive face, eye colors, natural ears, coat or skin, body build, and tail recognizable as it moves. The floor stays stable beneath it, and the contact shadow responds to each change in support. The image provides identity and scene guidance; the posture is free to develop into <Subject 3> from <Video 1>.
+From 00:00.000, <Subject 4> enters from screen-left on a thin dark rod, bringing a bright blue, yellow, red, and orange feather cluster across the cat's chest. During roughly the first half-second, the seated cat fixes its gaze on the feathers and inclines its head toward their path. The toy then draws away toward screen-left, remaining continuously attached to the rod and visibly motivating the response.
+Between approximately 00:00.500 and 00:01.100, <Subject 1> begins <Subject 3>. Lean the chest forward, shift weight onto the own-right forepaw on screen-left, and lift the hindquarters from the seated position. The other forepaw, the cat's own left paw initially on screen-right, lifts and reaches diagonally across the front of the chest toward the feathers at screen-left. Transfer the shoulder rotation, bent elbow, and extended paw in the reference while keeping the limbs distinct. The hind feet reposition beneath the rising hips and begin supporting the standing body.
+Through approximately 00:01.100 to 00:01.900, the raised paw makes short repeated forward swats near the toy, drawing back toward the chest between reaches, then comes down for a small forward-sideways step toward screen-left. The body follows that step, rotating into a slight three-quarter stance. The tail lifts naturally as balance changes, within the length and shape belonging to this individual cat. The feather cluster bobs just ahead of the face with a faint rustle; the planted paws make soft contacts against the studio floor.
+By about 00:02.200, all four paws support the cat. Hold the standing, slightly side-facing posture through 00:04.000, with the head turned toward the feather cluster at screen-left. Keep the body in its new position and the toy visible near the forward shoulder and face. The cat finishes standing and watching; its hips do not sink back into a sit.
+Keep the action continuous through the final frame at approximately 00:04.000. Preserve the final state described above with subtle breathing and small natural eye movements, without restarting the action or returning to the opening pose. Maintain a single coherent body with attached limbs, anatomically plausible joints, and consistent scale in perspective. No person, visible human hand, extra cat, text, or graphic overlay enters the studio. Quiet room tone accompanies restrained, synchronized sounds from the described movement; there is no speech or vocal performance.
+
+overall_soundscape:
+Quiet studio room tone with faint paw contacts, body or fur movement, and subdued toy sounds where a toy is present. Generate soft physical sounds synchronized with the new action. The original reference audio is removed and is not reused.
+
+non_diegetic_music:
+N/A

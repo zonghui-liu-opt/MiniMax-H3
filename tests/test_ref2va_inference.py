@@ -451,6 +451,30 @@ class RefInferenceTest(unittest.TestCase):
             self.assertEqual(summary["completed"], 4)
             self.assertEqual(summary["manifests"], [str(self.output.resolve() / "metadata.manifest.json")])
 
+    def test_single_cat_all_motions_then_full_batch_reuses_completed_preview(self):
+        shutil.copyfile(self.media / "motion.mp4", self.output / "mirror.mp4")
+        for index, row in enumerate(self.rows):
+            mirror = index % 2 == 1
+            row.update(cat_id="00-orange-cat" if index < 2 else "38-peterbald", seed="0",
+                       motion_id="03-pull-right-ear" if mirror else "02-pull-left-ear",
+                       motion_slug="drag_ear_mirror" if mirror else "drag_ear",
+                       reference_video="mirror.mp4" if mirror else "motion.mp4")
+            row["output_name"] = f"{row['id']}_{row['cat_id']}_{row['motion_id']}_seed-0"
+        self.write_rows()
+        full_metadata = self.output / "all.csv"
+        shutil.copyfile(self.metadata, full_metadata)
+        full_names = {r["output_name"] for r in self.rows}
+        self.rows = self.rows[:2]
+        self.write_rows()
+        with servers() as instances:
+            self.assertEqual(self.run_on(instances), 0)
+            self.assertEqual(sum(len(s.submitted) for s in instances), 2)
+            self.assertEqual(self.run_on(instances, "--metadata", str(full_metadata)), 0)
+            self.assertEqual(sum(len(s.submitted) for s in instances), 4)
+            files = list((self.output / "videos").glob("*/*.mp4"))
+            self.assertEqual({p.stem for p in files}, full_names)
+            self.assertEqual({p.parent.name for p in files}, {"drag_ear", "drag_ear_mirror"})
+
     def test_changed_prompt_and_material_refuse_stale_results(self):
         case = ref.load_cases(self.args())[0]
         paths = ref.case_paths(self.output, case)

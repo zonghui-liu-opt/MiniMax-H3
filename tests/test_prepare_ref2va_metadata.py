@@ -123,6 +123,64 @@ class PrepareRef2VATest(unittest.TestCase):
         self.assertEqual(self.output.read_text(), "existing metadata")
         self.assertEqual(len(self.run_prepare(motions=["drag_ear"])), 6)
 
+    def test_unprefixed_and_space_prefixed_references_are_not_silently_skipped(self):
+        for filename in ("walk_forward_to_screen.mp4", " Ref_curl_up_and_lie_down.mp4"):
+            with self.subTest(filename=filename):
+                path = self.experiment / filename
+                path.write_bytes(b"new reference")
+                with self.assertRaisesRegex(prepare.MetadataError, "尚未配置独立提示词"):
+                    self.run_prepare()
+                path.unlink()
+
+    def cli_args(self, *extra):
+        return ["--motions", str(self.motions), "--cat-catalog", str(self.catalog),
+                "--cat-dir", str(self.cat_dir), "--output", str(self.output), *extra]
+
+    def test_cli_single_seed_smoke_and_split_share_full_task_names_and_rebased_paths(self):
+        motion = dict(self.config["motions"][0])
+        motion.update(motion_id="03-pull-right-ear", motion_slug="drag_ear_mirror")
+        self.config["motions"].append(motion)
+        self.write_config()
+        smoke_path = self.experiment / "preview/smoke.csv"
+        split_dir = self.experiment / "metadata"
+        with patch.object(prepare, "validate_reference", return_value=({}, 4.0)):
+            self.assertEqual(prepare.main(self.cli_args(
+                "--smoke-output", str(smoke_path), "--smoke-cat-id", "38",
+                "--per-motion-dir", str(split_dir))), 0)
+        def read(path):
+            with path.open(newline="", encoding="utf-8") as handle:
+                return list(csv.DictReader(handle))
+        full, smoke = read(self.output), read(smoke_path)
+        self.assertEqual(len(full), 4)
+        self.assertEqual({r["seed"] for r in full}, {"0"})
+        self.assertEqual({r["cat_idx"] for r in smoke}, {"38"})
+        self.assertEqual({r["output_name"] for r in smoke},
+                         {r["output_name"] for r in full if r["cat_idx"] == "38"})
+        splits = [(path, read(path)) for path in split_dir.glob("*.csv")]
+        self.assertEqual(len(splits), 2)
+        self.assertTrue(all(len(rows) == 2 for _, rows in splits))
+        self.assertEqual({r["output_name"] for _, rows in splits for r in rows},
+                         {r["output_name"] for r in full})
+        by_name = {r["output_name"]: r for r in full}
+        for path, subset in [(smoke_path, smoke), *splits]:
+            for row in subset:
+                original = by_name[row["output_name"]]
+                self.assertEqual(row["id"], original["id"])
+                self.assertEqual(row["prompt_sha256"], original["prompt_sha256"])
+                for field in ("input_image", "source_reference_video", "reference_video", "prompt_file"):
+                    self.assertEqual((path.parent / row[field]).resolve(),
+                                     (self.output.parent / original[field]).resolve())
+
+    def test_invalid_smoke_selection_or_output_collision_preserves_existing_metadata(self):
+        self.output.write_text("existing metadata")
+        for options in (("--smoke-output", str(self.output)),
+                        ("--smoke-output", str(self.source)),
+                        ("--smoke-output", str(self.experiment / "smoke.csv"), "--smoke-cat-id", "99"),
+                        ("--smoke-output", str(self.experiment / "smoke.csv"), "--cat-ids", "38")):
+            with self.subTest(options=options):
+                self.assertEqual(prepare.main(self.cli_args(*options)), 2)
+                self.assertEqual(self.output.read_text(), "existing metadata")
+
     def test_invalid_seeds_selection_and_prompt_preserve_metadata(self):
         self.output.write_text("existing metadata")
         for seeds, cats, motions in [([], None, None), ([0, 0], None, None),

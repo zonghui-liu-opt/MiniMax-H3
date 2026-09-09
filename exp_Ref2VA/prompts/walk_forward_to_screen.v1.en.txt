@@ -1,0 +1,29 @@
+subject_definitions:
+<Subject 1> is the individual cat in <Picture 1>, which supplies its identity: facial proportions, eyes, nose, natural ears, coat pattern or bare skin, body build, and tail anatomy.
+<Subject 2> is the studio environment in <Picture 1>, which supplies the background, floor, lighting, contact shadows, camera viewpoint, and initial framing.
+<Subject 3> is the feline movement in <Video 1>: rising from a forward-facing sit, walking straight toward the fixed camera with alternating forepaw and hindpaw steps, becoming larger in the frame through real forward movement, and stopping nearby in a front-facing stance.
+<Video 1> is the silent visual reference derived from walk_forward_to_screen.mp4. It supplies the action sequence, screen direction, relative timing, and ending state for the four-second target shot.
+
+summary:
+[reference generation] Generate a four-second single-shot studio video of <Subject 1> in <Subject 2>, transferring <Subject 3> from <Video 1>. Follow the observed movement through its distinct ending state.
+
+retention_analysis:
+<Subject 1> (appears throughout [Shot 1]): fully_preserved - maintain this cat's identity, including asymmetrical markings, folded or curled ears, short or absent tail, long fur, or bare skin. Adapt movement to its natural proportions; never mirror the identity image or substitute the reference cat's markings.
+<Subject 2> (appears throughout [Shot 1]): fully_preserved - retain the image's studio setting, floor plane, fixed viewpoint, and lighting; body position, silhouette, scale, and shadows evolve naturally with the action.
+<Subject 3> (appears during [Shot 1]): attribute_transfer - transfer the observed movement to <Subject 1>, preserving the stated direction, support changes, contact sequence, and final pose.
+<Video 1> (movement timing and ending state in [Shot 1]): fully_preserved - preserve the reference's single-shot temporal structure and directional action within four seconds. The source cat's identity, backdrop, and soundtrack are outside this role.
+
+detailed_description:
+The target video has the photographic studio appearance of <Picture 1>, with soft illumination, realistic feline anatomy, and continuous movement. The camera remains fixed for the entire four-second shot.
+[Shot 1] At the opening, <Subject 1> sits facing the camera in <Subject 2>, following the cat image's initial placement and scale. Keep its distinctive face, eye colors, natural ears, coat or skin, body build, and tail recognizable as it moves. The floor stays stable beneath it, and the contact shadow responds to each change in support. The image provides identity and scene guidance; the posture is free to develop into <Subject 3> from <Video 1>.
+From 00:00.000 through about 00:00.900, <Subject 1> holds the initial forward-facing seated pose, with small eye and head movements following <Video 1>. Keep the chest aligned with the camera and both forepaws initially on the floor. The original source lasts approximately 4.042 seconds; fit its same action order naturally into the four-second target without adding a second action.
+Around 00:00.900 to 00:01.400, begin <Subject 3>. The cat inclines its body forward, shifts weight onto the forelegs, unfolds the hind legs, and raises its hips from the floor. Its own left forepaw, on screen-right in the frontal view, makes the first clearly advancing step. The paw lifts, travels forward close to the floor, and plants closer to the camera while the body follows over it.
+From approximately 00:01.400 to 00:02.800, continue the reference's short approach with alternating forepaw steps and coordinated following hindpaw steps. Each planted paw supports weight before the next one advances; the shoulders and hips move with a small natural walking rhythm. Keep the face directed toward the camera, with the cat advancing along the floor rather than sliding. Preserve the individual's limb lengths, coat pattern, ears, and tail as its perspective changes. The fixed camera does not zoom, pan, or track backward: the cat genuinely gets closer and grows larger against the unchanged background. Soft paw contacts follow the footfalls.
+By approximately 00:02.800 to 00:03.200, the cat slows and stands near the camera, noticeably larger and lower in the frame than at the start. Its face and upper body now dominate the composition; the lowermost paws may approach or pass the bottom edge naturally, as in the reference. From 00:03.200 to 00:04.000, keep this close standing position with the slight curious head inclination visible in <Video 1>, maintaining eye contact. It remains near the lens and does not step backward or sit down.
+Keep the action continuous through the final frame at approximately 00:04.000. Preserve the final state described above with subtle breathing and small natural eye movements, without restarting the action or returning to the opening pose. Maintain a single coherent body with attached limbs, anatomically plausible joints, and consistent scale in perspective. No person, visible human hand, extra cat, text, or graphic overlay enters the studio. Quiet room tone accompanies restrained, synchronized sounds from the described movement; there is no speech or vocal performance.
+
+overall_soundscape:
+Quiet studio room tone with faint paw contacts, body or fur movement, and subdued toy sounds where a toy is present. Generate soft physical sounds synchronized with the new action. The original reference audio is removed and is not reused.
+
+non_diegetic_music:
+N/A

@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SEEDS = [0, 10000, 20000]
+DEFAULT_SEEDS = [0]
 PROMPT_SECTIONS = (
     "subject_definitions", "summary", "retention_analysis",
     "detailed_description", "overall_soundscape", "non_diegetic_music",
@@ -160,7 +160,7 @@ def read_motions(path: Path, selectors: list[str] | None) -> list[dict]:
         motions.append({**row, "prompt": prompt, "prompt_file_path": prompt_file})
     if not motions:
         raise MetadataError("motions.json 没有动作")
-    unknown = {p.resolve() for p in path.parent.glob("Ref_*.mp4")} - references
+    unknown = {p.resolve() for p in path.parent.glob("*.mp4")} - references
     if unknown and selectors is None:
         raise MetadataError("新增参考视频尚未配置独立提示词，请先登记 motions.json: "
                             + ", ".join(sorted(p.name for p in unknown))
@@ -338,12 +338,24 @@ def prepare_metadata(motions_path: Path, cat_catalog: Path, cat_dir: Path,
                 rows.append({field: str(row[field]) for field in FIELDS})
     if not rows:
         raise MetadataError("筛选后没有猫咪/动作组合")
+    write_metadata(output, rows)
+    return rows
+
+
+def write_metadata(output: Path, rows: list[dict[str, str]], *,
+                   relative_to: Path | None = None) -> None:
+    """Write a subset without renumbering tasks; rebase paths for its location."""
     content = io.StringIO(newline="")
     writer = csv.DictWriter(content, fieldnames=FIELDS, lineterminator="\n")
     writer.writeheader()
-    writer.writerows(rows)
+    for source in rows:
+        row = dict(source)
+        if relative_to is not None:
+            for field in ("input_image", "source_reference_video", "reference_video", "prompt_file"):
+                target = (relative_to / row[field]).resolve()
+                row[field] = Path(os.path.relpath(target, output.parent)).as_posix()
+        writer.writerow(row)
     atomic_text(output, content.getvalue())
-    return rows
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -351,22 +363,58 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--motions", type=Path, default=ROOT / "exp_Ref2VA/motions.json")
     parser.add_argument("--cat-catalog", type=Path, default=ROOT / "exp_Ref2VA/cat_catalog.csv")
     parser.add_argument("--cat-dir", type=Path, default=ROOT / "data_h3/cat_ids")
-    parser.add_argument("--output", type=Path, default=ROOT / "exp_Ref2VA/metadata.csv")
+    parser.add_argument("--output", type=Path, default=ROOT / "exp_Ref2VA/metadata_all.csv")
     parser.add_argument("--seeds", nargs="+", type=int, default=DEFAULT_SEEDS,
-                        help="每个组合的实际seed，默认 0 10000 20000，不叠加行号")
+                        help="每个组合的实际seed，默认仅 0：每个参考视频80只猫，不叠加行号")
     parser.add_argument("--cat-ids", nargs="+", help="猫编号或完整 ID，例如 00 38-peterbald")
     parser.add_argument("--motion-ids", nargs="+", help="动作编号、完整 ID 或目录名，例如 02 drag_ear")
     parser.add_argument("--prepare-media", action="store_true",
                         help="同时生成静音参考缓存；默认由推理入口在运行时自动准备")
+    parser.add_argument("--smoke-output", type=Path,
+                        help="同时输出单猫覆盖全部所选动作的CSV，复用全量任务编号和seed")
+    parser.add_argument("--smoke-cat-id", default="00",
+                        help="预览使用的猫编号或完整ID，默认00；须在本次所选猫中")
+    parser.add_argument("--per-motion-dir", type=Path,
+                        help="同时按动作拆分CSV到此目录，文件名为<motion_slug>.csv")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        # Validate extra destinations before writing any metadata. The motion
+        # registry also supplies the exact filenames used for split outputs.
+        destinations = [args.output.expanduser().resolve()]
+        motions = read_motions(args.motions.expanduser().resolve(), args.motion_ids)
+        selected = [m for m in motions if matches(m["motion_id"], args.motion_ids, m["motion_slug"])]
+        if args.smoke_output:
+            cats = read_catalog(args.cat_catalog.expanduser().resolve(), args.cat_dir.expanduser().resolve())
+            if not any(matches(c["cat_id"], [args.smoke_cat_id]) and matches(c["cat_id"], args.cat_ids)
+                       for c in cats):
+                raise MetadataError(f"预览猫 {args.smoke_cat_id} 不在本次所选猫中")
+            destinations.append(args.smoke_output.expanduser().resolve())
+        if args.per_motion_dir:
+            destinations.extend((args.per_motion_dir / f"{m['motion_slug']}.csv").expanduser().resolve()
+                                for m in selected)
+        protected = {args.motions.expanduser().resolve(), args.cat_catalog.expanduser().resolve()}
+        protected.update(m[k] for m in motions for k in ("source_reference", "prompt_file_path"))
+        protected.update(p.resolve() for p in args.cat_dir.expanduser().iterdir() if p.is_file())
+        if len(set(destinations)) != len(destinations) or set(destinations) & protected:
+            raise MetadataError("metadata 输出路径重复或会覆盖输入文件")
         rows = prepare_metadata(args.motions, args.cat_catalog, args.cat_dir, args.output,
                                 args.seeds, args.cat_ids, args.motion_ids,
                                 prepare_media=args.prepare_media)
+        if args.smoke_output:
+            smoke = [r for r in rows if matches(r["cat_id"], [args.smoke_cat_id])]
+            write_metadata(args.smoke_output.expanduser().resolve(), smoke,
+                           relative_to=args.output.expanduser().resolve().parent)
+            print(f"单猫预览 {len(smoke)} 行: {args.smoke_output}")
+        if args.per_motion_dir:
+            for motion in selected:
+                subset = [r for r in rows if r["motion_slug"] == motion["motion_slug"]]
+                write_metadata((args.per_motion_dir / f"{motion['motion_slug']}.csv").expanduser().resolve(),
+                               subset, relative_to=args.output.expanduser().resolve().parent)
+            print(f"已按动作拆分 {len(selected)} 份CSV: {args.per_motion_dir}")
     except (MetadataError, OSError, csv.Error, ValueError, TypeError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
         return 2
