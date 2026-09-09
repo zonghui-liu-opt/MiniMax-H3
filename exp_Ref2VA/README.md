@@ -37,18 +37,18 @@ bash infer_ref2va_8gpu.sh --start-servers \
 bash serve_ref2va_8gpu.sh --resolution 480x832
 
 # 终端B：指定实际推理尺寸；新输出目录保留此前768结果
-bash infer_ref2va_8gpu.sh --resolution 480x832 --output-dir exp_Ref2VA/480x832
+bash infer_ref2va_8gpu.sh --resolution 480x832 --output-dir exp_Ref2VA/480x832 --retry-failed
 ```
 
 结果位于 `exp_Ref2VA/480x832/videos/drag_ear/`，文件名继续沿用metadata。也可一体化运行 `bash infer_ref2va_8gpu.sh --start-servers --resolution 480x832 --output-dir exp_Ref2VA/480x832`。服务启动参数用于放开自定义尺寸，实际每条请求的尺寸由推理命令指定；之后改变支持的分辨率无需再次重启服务。
 
-较早的H3接口在两处硬编码要求短边768。只有显式指定 `--resolution` 并启动服务时，入口才会在当前Python环境的SGLang中把这两处已知限制改为正整数检查；已有新实现无需修改。保留默认值、比例限制、32像素对齐和像素上限，不读取版本号、不安装依赖、不生成补丁包。修改后的代码由新启动的所有GPU进程加载。`--dry-run` 不修改环境。
+较早的H3接口在两处硬编码要求短边768。只有显式指定 `--resolution` 并启动服务时，入口才会在导入这两个模块时，将已知限制在内存中改为正整数检查。该处理在服务主进程和所有GPU工作进程中生效，不写入SGLang安装文件或字节码缓存；只读环境也可使用，无需sudo、修改目录权限或安装依赖。保留默认值、比例限制、32像素对齐和像素上限，不检查版本、不生成补丁包。`--dry-run` 仅预览命令。此前失败的任务可用 `--retry-failed` 继续。
 
 H3忽略 `target.width/height`，且 `short_edge=480, aspect_ratio=9:16` 会对齐为480×864。入口为480×832发送 `short_edge=468, aspect_ratio=9:16`，让服务原生得到精确画布。分辨率计入请求指纹，拒绝误复用其他尺寸的任务；下载后也核实实际MP4宽高，不匹配不会标记完成。接口规则见[官方shape resolver](https://github.com/sgl-project/sglang/blob/v0.5.19/python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/resolved_plan.py)。低分辨率减少目标视频token，但参考视频编码和参考token仍有计算成本，实际加速与效果需在GPU上验证。
 
 ## 沿用现有环境
 
-在已经跑通FL2VA的环境执行，启动方式复用 `serve_smoke_8gpu.sh` 的调度器，模型参数使用 `--model-variant ref2va`。不检查包版本、解析安装源码、扫描权重头、预检编码器或要求自定义服务名称；SGLang直接加载模型并报告实际错误。无需为本次修正安装指定版本或搬运wheel包。
+在已经跑通FL2VA的环境执行，启动方式复用 `serve_smoke_8gpu.sh` 的调度器，模型参数使用 `--model-variant ref2va`。不做包版本、权重头或编码器预检，不要求自定义服务名称；SGLang直接加载模型并报告实际错误。无需为本次修正安装指定版本或搬运wheel包。
 
 `--model-path` 传含完整 `Ref2VA/` 分区的模型根目录，不能传 `Ref2VA` 子目录或FL2VA分区。入口保持Hub离线模式。批量客户端使用Python标准库和现有 `ffmpeg`、`ffprobe`；静音缓存通过 `-c:v copy -an` 复制视频轨道，不需要libx264重新编码。只启动server不处理这些素材。
 

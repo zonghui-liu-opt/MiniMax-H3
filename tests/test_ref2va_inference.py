@@ -4,10 +4,13 @@ import argparse
 import csv
 import hashlib
 import json
+import os
+import py_compile
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import unittest
 from pathlib import Path
@@ -65,69 +68,149 @@ def check(value):
 ''')
         return request, shape
 
-    def test_legacy_guards_accept_positive_sizes_and_patch_is_idempotent(self):
+    def fake_sglang(self, root):
+        package = root / "sglang"
+        paths = self.legacy_guards(package)
+        cli = package / "cli"
+        cli.mkdir()
+        for directory in (package, *[p for p in package.rglob("*") if p.is_dir()]):
+            (directory / "__init__.py").write_text("")
+        (cli / "main.py").write_text(textwrap.dedent('''
+            import importlib
+            import json
+            import multiprocessing
+            import os
+            import sys
+
+            def checks():
+                prefix = "sglang.multimodal_gen.runtime.pipelines_core.stages.model_specific_stages.minimax_h3."
+                result = {"pid": os.getpid(), "enabled": os.environ.get("MINIMAX_H3_CUSTOM_RESOLUTION")}
+                for name in ("request_validation", "resolved_plan"):
+                    check = importlib.import_module(prefix + name).check
+                    accepted = {}
+                    for value in (468, 768, 0):
+                        try:
+                            accepted[str(value)] = check(value) == value
+                        except ValueError:
+                            accepted[str(value)] = False
+                    result[name] = accepted
+                return result
+
+            def worker(queue):
+                queue.put(checks())
+
+            def main():
+                assert sys.argv[1:] == ["serve"], sys.argv
+                context = multiprocessing.get_context("spawn")
+                queue = context.Queue()
+                children = [context.Process(target=worker, args=(queue,)) for _ in range(4)]
+                parent = checks()
+                for child in children:
+                    child.start()
+                workers = [queue.get(timeout=15) for _ in children]
+                for child in children:
+                    child.join(timeout=15)
+                    assert child.exitcode == 0, child.exitcode
+                queue.close()
+                queue.join_thread()
+                print(json.dumps({"parent": parent, "workers": workers}))
+                return 0
+
+            if __name__ == "__main__":
+                sys.exit(main())
+        '''))
+        return paths
+
+    def subprocess_env(self, root):
+        environment = dict(os.environ, PYTHONPATH=str(root))
+        environment.pop("MINIMAX_H3_CUSTOM_RESOLUTION", None)
+        return environment
+
+    def tree_snapshot(self, root):
+        return {str(path.relative_to(root)): (path.stat().st_mode,
+                path.read_bytes() if path.is_file() else None)
+                for path in (root, *root.rglob("*"))}
+
+    def test_read_only_installation_and_four_spawned_workers_use_in_memory_override(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            paths = self.legacy_guards(root)
-            self.assertEqual(entry.enable_custom_short_edge(root), list(paths))
+            for path in self.fake_sglang(root):
+                py_compile.compile(str(path), doraise=True)
+            modes = {path: path.stat().st_mode for path in (root, *root.rglob("*"))}
+            for path in sorted(modes, key=lambda p: len(p.parts), reverse=True):
+                path.chmod(0o555 if path.is_dir() else 0o444)
+            before = self.tree_snapshot(root)
+            try:
+                commands = (
+                    ([sys.executable, "-B", "-m", "sglang.cli.main", "serve"], False),
+                    ([sys.executable, "-B", str(Path(entry.__file__).resolve()),
+                      "--sglang-server", "serve"], True),
+                )
+                for command, enabled in commands:
+                    with self.subTest(override=enabled):
+                        process = subprocess.run(command, env=self.subprocess_env(root),
+                                                 capture_output=True, text=True, timeout=45)
+                        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+                        report = json.loads(process.stdout.strip().splitlines()[-1])
+                        records = [report["parent"], *report["workers"]]
+                        self.assertEqual(len(records), 5)
+                        self.assertEqual(len({record["pid"] for record in records}), 5)
+                        for record in records:
+                            self.assertEqual(record["enabled"], "1" if enabled else None)
+                            for name in ("request_validation", "resolved_plan"):
+                                self.assertEqual(record[name],
+                                                 {"468": enabled, "768": True, "0": False})
+                        self.assertEqual(before, self.tree_snapshot(root))
+            finally:
+                for path in sorted(modes, key=lambda p: len(p.parts)):
+                    path.chmod(modes[path])
+
+    def test_unknown_source_passes_through_and_installer_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = self.fake_sglang(root)
             for path in paths:
-                namespace = {}
-                exec(compile(path.read_text(), str(path), "exec"), namespace)
-                self.assertEqual(namespace["check"](468), 468)
-                self.assertEqual(namespace["check"](768), 768)
-                with self.assertRaises(ValueError):
-                    namespace["check"](0)
-            before = {p: p.read_bytes() for p in paths}
-            self.assertEqual(entry.enable_custom_short_edge(root), [])
-            self.assertEqual(before, {p: p.read_bytes() for p in paths})
+                path.write_text('def check(value):\n    return ("unchanged", value)\n')
+            before = self.tree_snapshot(root)
+            code = textwrap.dedent(f'''
+                import importlib
+                import sys
+                sys.path.insert(0, {str(Path(entry.__file__).resolve().parent)!r})
+                import infer_ref2va_8gpu as entry
+                entry.install_resolution_override()
+                first = tuple(sys.meta_path)
+                entry.install_resolution_override()
+                assert tuple(sys.meta_path) == first
+                prefix = "sglang.multimodal_gen.runtime.pipelines_core.stages.model_specific_stages.minimax_h3."
+                for name in ("request_validation", "resolved_plan"):
+                    check = importlib.import_module(prefix + name).check
+                    assert check(468) == ("unchanged", 468)
+                    assert check(0) == ("unchanged", 0)
+            ''')
+            process = subprocess.run([sys.executable, "-B", "-c", code],
+                                     env=self.subprocess_env(root), capture_output=True,
+                                     text=True, timeout=15)
+            self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+            self.assertEqual(before, self.tree_snapshot(root))
 
-    def test_unknown_or_invalid_source_never_partially_changes_installation(self):
-        for invalid_source in ("# unfamiliar implementation\n", "\ndef syntax_error(:\n"):
-            with self.subTest(source=invalid_source), tempfile.TemporaryDirectory() as temp:
-                root = Path(temp)
-                paths = self.legacy_guards(root)
-                if invalid_source.startswith("#"):
-                    paths[1].write_text(invalid_source)
-                else:
-                    paths[1].write_text(paths[1].read_text() + invalid_source)
-                before = {p: p.read_bytes() for p in paths}
-                self.assertEqual(entry.enable_custom_short_edge(root), [])
-                self.assertEqual(before, {p: p.read_bytes() for p in paths})
-
-    def test_second_source_write_failure_restores_first_source(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            paths = self.legacy_guards(root)
-            before = {p: p.read_bytes() for p in paths}
-            modes = {p: p.stat().st_mode for p in paths}
-            atomic_text = ref.metadata_tools.atomic_text
-            writes = []
-
-            def fail_second_write(path, content):
-                writes.append(path)
-                if len(writes) == 2:
-                    self.assertNotEqual(paths[0].read_bytes(), before[paths[0]])
-                    raise OSError("second source is read-only")
-                atomic_text(path, content)
-
-            with mock.patch.object(ref.metadata_tools, "atomic_text", side_effect=fail_second_write), \
-                    self.assertRaisesRegex(OSError, "second source is read-only"):
-                entry.enable_custom_short_edge(root)
-            self.assertEqual(writes, [paths[0], paths[1], paths[0]])
-            self.assertEqual(before, {p: p.read_bytes() for p in paths})
-            self.assertEqual(modes, {p: p.stat().st_mode for p in paths})
-
-    def test_compatibility_patch_only_runs_for_explicit_server_start_resolution(self):
+    def test_wrapper_only_selected_for_explicit_server_start_resolution(self):
         for argv, expected in (([], False), (["--resolution", "480x832"], False),
                                (["--serve-only"], False),
-                               (["--serve-only", "--resolution", "480x832", "--dry-run"], False),
+                               (["--serve-only", "--resolution", "480x832", "--dry-run"], True),
                                (["--serve-only", "--resolution", "480x832"], True),
                                (["--start-servers", "--resolution", "480x832"], True)):
             with self.subTest(argv=argv), \
-                    mock.patch.object(entry, "enable_custom_short_edge", return_value=[]) as enable, \
-                    mock.patch.object(runner, "main", return_value=0):
+                    mock.patch.object(entry, "install_resolution_override") as install, \
+                    mock.patch.object(runner, "main", return_value=0) as dispatch:
                 self.assertEqual(entry.main(argv), 0)
-                self.assertEqual(enable.call_count, int(expected))
+                install.assert_not_called()
+                args = dispatch.call_args.kwargs["parser"].parse_args(argv)
+                commands, _ = runner.server_commands(args)
+                prefix = ([sys.executable, "-B", str(Path(entry.__file__).resolve()),
+                           "--sglang-server", "serve"] if expected else ["sglang", "serve"])
+                self.assertTrue(all(command[:len(prefix)] == prefix for _, command in commands))
+        commands, _ = runner.server_commands(runner.build_parser().parse_args([]))
+        self.assertTrue(all(command[:2] == ["sglang", "serve"] for _, command in commands))
 
 
 @unittest.skipUnless(shutil.which("ffprobe") and shutil.which("ffmpeg"), "needs ffmpeg/ffprobe")

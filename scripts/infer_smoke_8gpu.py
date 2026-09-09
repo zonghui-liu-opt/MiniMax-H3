@@ -121,7 +121,8 @@ def server_commands(args):
         # shared default before launch is racy: both replicas can choose it
         # before either worker binds. Allocate distinct ports explicitly.
         commands.append((group, [
-            "sglang", "serve", "--model-path", args.model_path,
+            *getattr(args, "server_command_prefix", ["sglang"]),
+            "serve", "--model-path", args.model_path,
             "--num-gpus", str(len(ids)), "--tp-size", str(args.tp_size),
             "--ulysses-degree", str(args.ulysses_degree),
             "--performance-mode", "speed", "--host", "127.0.0.1",
@@ -358,8 +359,9 @@ def run(args, stop_event, *, backend=batch):
     log_paths = []
     try:
         if commands:
-            if not shutil.which("sglang"):
-                raise batch.BatchError("找不到 sglang；请在已跑通推理的 Python 环境执行")
+            launcher = commands[0][1][0]
+            if not shutil.which(launcher):
+                raise batch.BatchError(f"找不到 {launcher}；请在已跑通推理的 Python 环境执行")
             check_ports_available(args, commands)
             run_id = f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{time.time_ns()}"
             log_root = args.service_dir.expanduser().resolve() if args.serve_only else args.output_dir
