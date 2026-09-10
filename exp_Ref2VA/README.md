@@ -60,7 +60,7 @@ bash infer_ref2va_8gpu.sh --metadata exp_Ref2VA/metadata/cat_teaser2.csv \
 代码通过 `zonghui-liu-opt/MiniMax-H3` 的 `data_pipeline` 分支同步。输入使用相对CSV所在位置的路径，可整目录搬运，不依赖本地Mac绝对路径。需在内网保留：
 
 - `data_h3/cat_ids/` 原有80张猫图；`cat_catalog.csv` 为ID与文件名映射。
-- 本目录上述12个原始MP4，文件名与表格一致。除原已跟踪的 `Ref_drag_ear.mp4` 外，新参考作为本地素材忽略，**仅拉取代码不会带上这11个新视频**，需要同步到内网的 `exp_Ref2VA/`。蜷卧原视频的前导空格已被CSV正确引用，无需重命名。
+- 本目录上述12个原始MP4均已纳入Git，随 `data_pipeline` 分支一起同步，文件名与表格一致。蜷卧原视频的前导空格已被CSV正确引用，无需重命名。
 - `motions.json`、`prompts/*.v1.en.txt`、`metadata_all.csv`、`metadata_smoke.csv` 和 `metadata/*.csv`。
 
 只维护一份推理实现、一份metadata生成器，以及按版本保存的动作提示词。metadata引用提示词文件并记录提示词/源视频哈希，不在960行里重复嵌入正文。静音参考、日志、state、请求预览、生成视频和清单均为忽略的运行产物；无需同步工程包、上游源码快照或静音副本。

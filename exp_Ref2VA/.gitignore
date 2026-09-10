@@ -10,6 +10,3 @@ preflight.json
 *.manifest.json
 manifest.json
 .*.lock
-# Raw references are supplied separately on the inference host. The already
-# tracked successful Ref_drag_ear.mp4 remains tracked.
-/*.mp4
