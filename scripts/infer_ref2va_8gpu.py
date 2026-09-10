@@ -92,6 +92,10 @@ def build_parser():
                         help="原生生成尺寸，例如480x832；省略时沿用768短边，不做生成后缩放")
     parser.add_argument("--write-requests", action="store_true",
                         help="显式保存调试请求预览；默认不生成这些文件")
+    parser.add_argument("--cat-ids", nargs="+",
+                        help="从metadata筛选猫编号或完整ID，例如00 38；筛选后再应用--limit")
+    parser.add_argument("--motion-ids", nargs="+",
+                        help="从metadata筛选动作编号、完整ID或目录名，例如cat_teaser2")
     parser.epilog = ("默认读取 exp_Ref2VA/metadata.csv，复用30110/30112的Ref2VA服务；"
                      "--start-servers 一条命令启动、推理并清理服务。"
                      "输出 videos/<motion_slug>/<output_name>.mp4；"

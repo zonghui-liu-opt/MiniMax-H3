@@ -76,7 +76,7 @@ def resolve_file(value: str, parent: Path, field: str) -> Path:
 
 def matches(value: str, selectors: list[str] | None, slug: str = "") -> bool:
     return selectors is None or any(
-        selection in (value, slug)
+        selection == "*" or selection in (value, slug)
         or (selection.isascii() and selection.isdigit()
             and int(selection) == int(value.split("-", 1)[0]))
         for selection in selectors
@@ -128,6 +128,82 @@ def validate_prompt(prompt: str, path: Path) -> None:
         raise MetadataError(f"{path} 的六段提示词必须使用英文")
 
 
+def read_identity_prompts(path: Path) -> dict:
+    """Load one versioned, image-bound identity catalog shared by all motions."""
+    config = json.loads(path.read_text(encoding="utf-8"))
+    template_keys = {"subject_definition", "retention", "opening", "continuity", "closing"}
+    if (not isinstance(config, dict) or config.get("schema_version") != 1
+            or not isinstance(config.get("cats"), dict) or not config["cats"]
+            or not isinstance(config.get("templates"), dict)
+            or set(config["templates"]) != template_keys):
+        raise MetadataError(f"身份提示词格式无效: {path}")
+    for field in ("prompt_version", "prompt_status"):
+        if not isinstance(config.get(field), str) or not config[field].strip():
+            raise MetadataError(f"身份提示词缺少 {field}: {path}")
+    for cat_id, identity in config["cats"].items():
+        if (not NAMED_ID.fullmatch(cat_id) or not isinstance(identity, dict)
+                or not re.fullmatch(r"[0-9a-f]{64}", str(identity.get("image_sha256", "")))):
+            raise MetadataError(f"身份提示词 cat_id/image_sha256 无效: {cat_id}")
+        for field in ("description", "anchor"):
+            value = identity.get(field)
+            if (not isinstance(value, str) or not value.strip()
+                    or "\n" in value or re.search(r"[\u3400-\u9fff]", value)):
+                raise MetadataError(f"{cat_id} 的 {field} 必须是单行英文身份描述")
+    for name, template in config["templates"].items():
+        if not isinstance(template, str) or not template.strip() or "\n" in template:
+            raise MetadataError(f"身份提示词模板无效: {name}")
+        try:
+            template.format(description="description", anchor="anchor")
+        except (KeyError, ValueError, IndexError, AttributeError) as exc:
+            raise MetadataError(f"身份提示词模板只能使用 description/anchor: {name}") from exc
+    return config
+
+
+def compose_identity_prompt(prompt: str, config: dict, cat_id: str, image_hash: str) -> str:
+    """Specialize identity while retaining the versioned motion's action paragraphs.
+
+    Both metadata preparation and inference use this exact renderer. The CSV
+    pins its final text, so changes cannot silently reuse old generation states.
+    """
+    identity = config["cats"].get(cat_id)
+    if identity is None:
+        raise MetadataError(f"身份提示词未登记 cat_id: {cat_id}")
+    if identity["image_sha256"] != image_hash:
+        raise MetadataError(f"{cat_id} 首帧图与身份描述的 image_sha256 不符；请重新审阅猫图和身份描述")
+    templates = {key: value.format(description=identity["description"], anchor=identity["anchor"])
+                 for key, value in config["templates"].items()}
+    validate_prompt(prompt, Path("motion prompt"))
+    parts = re.split(r"(?m)^([a-z_]+):[ \t]*\n", prompt)
+    sections = dict(zip(parts[1::2], (value.strip() for value in parts[2::2])))
+    for section, template in (("subject_definitions", "subject_definition"),
+                              ("retention_analysis", "retention")):
+        sections[section], count = re.subn(r"(?m)^<Subject 1>[^\n]*$",
+                                          lambda _: templates[template], sections[section])
+        if count != 1:
+            raise MetadataError(f"动作提示词 {section} 必须有一行独立的 <Subject 1>，无法组合身份")
+    paragraphs = sections["detailed_description"].splitlines()
+    openings = [i for i, paragraph in enumerate(paragraphs) if paragraph.startswith("[Shot 1]")]
+    if len(openings) != 1:
+        raise MetadataError("动作提示词必须有一行独立的 [Shot 1] 开场，无法组合身份")
+    opening = openings[0]
+    paragraphs[opening] = templates["opening"]
+    for i in range(opening + 1, len(paragraphs)):
+        if paragraphs[i].startswith("Keep the action continuous through the final frame"):
+            # Replace shared generic ending prose; keep the actual ending pose
+            # in the preceding action paragraph and the scene/sound constraints.
+            tail = paragraphs[i].partition("No person,")[2]
+            paragraphs[i] = templates["closing"] + (" No person," + tail if tail else "")
+            break
+    else:
+        paragraphs[-1] += " " + templates["closing"]
+    middle = opening + max(1, (len(paragraphs) - opening - 1) // 2)
+    paragraphs[middle] += " " + templates["continuity"]
+    sections["detailed_description"] = "\n".join(paragraphs)
+    result = "\n\n".join(f"{section}:\n{sections[section]}" for section in PROMPT_SECTIONS)
+    validate_prompt(result, Path(config["prompt_version"]))
+    return result
+
+
 def read_motions(path: Path, selectors: list[str] | None) -> list[dict]:
     config = json.loads(path.read_text(encoding="utf-8"))
     if config.get("schema_version") != 1 or not isinstance(config.get("motions"), list):
@@ -164,7 +240,7 @@ def read_motions(path: Path, selectors: list[str] | None) -> list[dict]:
     if unknown and selectors is None:
         raise MetadataError("新增参考视频尚未配置独立提示词，请先登记 motions.json: "
                             + ", ".join(sorted(p.name for p in unknown))
-                            + "；只运行已登记动作可显式指定 --motion-ids drag_ear")
+                            + "；只运行全部已登记动作可显式指定 --motion-ids '*'")
     for selector in selectors or []:
         if not any(matches(row["motion_id"], [selector], row["motion_slug"]) for row in motions):
             raise MetadataError(f"找不到 motion_id: {selector}")
@@ -270,7 +346,8 @@ def prepare_reference(motion: dict, prepared_dir: Path) -> tuple[Path, str]:
 def prepare_metadata(motions_path: Path, cat_catalog: Path, cat_dir: Path,
                      output: Path, seeds: list[int], cat_ids: list[str] | None = None,
                      motion_ids: list[str] | None = None, *,
-                     prepare_media: bool = False) -> list[dict[str, str]]:
+                     prepare_media: bool = False,
+                     identity_prompts: Path | None = None) -> list[dict[str, str]]:
     motions_path, cat_catalog, cat_dir, output = (
         p.expanduser().resolve() for p in (motions_path, cat_catalog, cat_dir, output))
     if output in (motions_path, cat_catalog):
@@ -283,6 +360,11 @@ def prepare_metadata(motions_path: Path, cat_catalog: Path, cat_dir: Path,
     motions = read_motions(motions_path, motion_ids)
     inputs = {cat["image"] for cat in cats} | {
         motion[field] for motion in motions for field in ("source_reference", "prompt_file_path")}
+    identities = None
+    if identity_prompts is not None:
+        identity_prompts = identity_prompts.expanduser().resolve()
+        inputs.add(identity_prompts)
+        identities = read_identity_prompts(identity_prompts)
     if output in inputs:
         raise MetadataError("输出 metadata 不能覆盖首帧、参考视频或提示词")
     for selector in cat_ids or []:
@@ -306,12 +388,15 @@ def prepare_metadata(motions_path: Path, cat_catalog: Path, cat_dir: Path,
         if not matches(cat["cat_id"], cat_ids):
             continue
         width, height = image_dimensions(cat["image"])
+        image_hash = sha256(cat["image"]) if identities else ""
         source_ratio, target_ratio = aspect_ratios(width, height)
         for motion_index, motion in enumerate(motions):
             if not matches(motion["motion_id"], motion_ids, motion["motion_slug"]):
                 continue
             reference, source_reference_hash, reference_duration = references[motion["motion_id"]]
             source_id = cat_index * len(motions) + motion_index
+            prompt = (compose_identity_prompt(motion["prompt"], identities, cat["cat_id"], image_hash)
+                      if identities else motion["prompt"])
             for seed_index, seed in enumerate(seeds):
                 case_id = f"{source_id * len(seeds) + seed_index:03d}"
                 output_name = f"{case_id}_{cat['cat_id']}_{motion['motion_id']}_seed-{seed}"
@@ -332,10 +417,14 @@ def prepare_metadata(motions_path: Path, cat_catalog: Path, cat_dir: Path,
                     "fps": motion["fps"], "width": width, "height": height,
                     "source_aspect_ratio": source_ratio, "aspect_ratio": target_ratio,
                     "prompt_version": motion["prompt_version"], "prompt_status": motion["prompt_status"],
-                    "prompt_sha256": hashlib.sha256(motion["prompt"].encode("utf-8")).hexdigest(),
+                    "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
                     "source_reference_sha256": source_reference_hash,
                 }
-                rows.append({field: str(row[field]) for field in FIELDS})
+                if identities:
+                    row["identity_prompt_file"] = Path(os.path.relpath(identity_prompts, output.parent)).as_posix()
+                    row["prompt_version"] += "+" + identities["prompt_version"]
+                    row["prompt_status"] = identities["prompt_status"]
+                rows.append({field: str(value) for field, value in row.items()})
     if not rows:
         raise MetadataError("筛选后没有猫咪/动作组合")
     write_metadata(output, rows)
@@ -345,13 +434,18 @@ def prepare_metadata(motions_path: Path, cat_catalog: Path, cat_dir: Path,
 def write_metadata(output: Path, rows: list[dict[str, str]], *,
                    relative_to: Path | None = None) -> None:
     """Write a subset without renumbering tasks; rebase paths for its location."""
+    output = output.expanduser().resolve()
     content = io.StringIO(newline="")
-    writer = csv.DictWriter(content, fieldnames=FIELDS, lineterminator="\n")
+    fields = FIELDS + (["identity_prompt_file"] if rows and "identity_prompt_file" in rows[0] else [])
+    writer = csv.DictWriter(content, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
     for source in rows:
         row = dict(source)
         if relative_to is not None:
-            for field in ("input_image", "source_reference_video", "reference_video", "prompt_file"):
+            for field in ("input_image", "source_reference_video", "reference_video", "prompt_file",
+                          "identity_prompt_file"):
+                if not row.get(field):
+                    continue
                 target = (relative_to / row[field]).resolve()
                 row[field] = Path(os.path.relpath(target, output.parent)).as_posix()
         writer.writerow(row)
@@ -363,11 +457,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--motions", type=Path, default=ROOT / "exp_Ref2VA/motions.json")
     parser.add_argument("--cat-catalog", type=Path, default=ROOT / "exp_Ref2VA/cat_catalog.csv")
     parser.add_argument("--cat-dir", type=Path, default=ROOT / "data_h3/cat_ids")
-    parser.add_argument("--output", type=Path, default=ROOT / "exp_Ref2VA/metadata_all.csv")
+    parser.add_argument("--output", type=Path,
+                        help="默认metadata_all.csv；启用身份提示词时默认metadata_identity_v1.csv，保留旧版")
+    parser.add_argument("--identity-prompts", type=Path,
+                        help="可选：按cat_id组合身份描述的版本化JSON；省略则沿用原动作提示词")
     parser.add_argument("--seeds", nargs="+", type=int, default=DEFAULT_SEEDS,
                         help="每个组合的实际seed，默认仅 0：每个参考视频80只猫，不叠加行号")
     parser.add_argument("--cat-ids", nargs="+", help="猫编号或完整 ID，例如 00 38-peterbald")
-    parser.add_argument("--motion-ids", nargs="+", help="动作编号、完整 ID 或目录名，例如 02 drag_ear")
+    parser.add_argument("--motion-ids", nargs="+", help="动作编号、完整 ID 或目录名；'*'显式选择全部已登记动作")
     parser.add_argument("--prepare-media", action="store_true",
                         help="同时生成静音参考缓存；默认由推理入口在运行时自动准备")
     parser.add_argument("--smoke-output", type=Path,
@@ -381,6 +478,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.output is None:
+        args.output = ROOT / "exp_Ref2VA" / (
+            "metadata_identity_v1.csv" if args.identity_prompts else "metadata_all.csv")
     try:
         # Validate extra destinations before writing any metadata. The motion
         # registry also supplies the exact filenames used for split outputs.
@@ -397,13 +497,15 @@ def main(argv: list[str] | None = None) -> int:
             destinations.extend((args.per_motion_dir / f"{m['motion_slug']}.csv").expanduser().resolve()
                                 for m in selected)
         protected = {args.motions.expanduser().resolve(), args.cat_catalog.expanduser().resolve()}
+        if args.identity_prompts:
+            protected.add(args.identity_prompts.expanduser().resolve())
         protected.update(m[k] for m in motions for k in ("source_reference", "prompt_file_path"))
         protected.update(p.resolve() for p in args.cat_dir.expanduser().iterdir() if p.is_file())
         if len(set(destinations)) != len(destinations) or set(destinations) & protected:
             raise MetadataError("metadata 输出路径重复或会覆盖输入文件")
         rows = prepare_metadata(args.motions, args.cat_catalog, args.cat_dir, args.output,
                                 args.seeds, args.cat_ids, args.motion_ids,
-                                prepare_media=args.prepare_media)
+                                prepare_media=args.prepare_media, identity_prompts=args.identity_prompts)
         if args.smoke_output:
             smoke = [r for r in rows if matches(r["cat_id"], [args.smoke_cat_id])]
             write_metadata(args.smoke_output.expanduser().resolve(), smoke,
@@ -423,6 +525,8 @@ def main(argv: list[str] | None = None) -> int:
           f" × seed {len(args.seeds)}；提示词状态：待模型验证")
     print(f"首个输出: videos/{rows[0]['motion_slug']}/{rows[0]['output_name']}.mp4")
     print("prompt_file 引用单份提示词；reference_video 为运行时自动准备的静音缓存路径")
+    if args.identity_prompts:
+        print("identity_prompt_file 按cat_id组合专属身份；prompt_sha256 校验组合后的完整提示词")
     return 0
 
 

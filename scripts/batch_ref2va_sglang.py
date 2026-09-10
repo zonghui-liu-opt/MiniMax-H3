@@ -191,6 +191,7 @@ def load_cases(args):
     if not metadata.is_file():
         raise base.BatchError(f"metadata 不存在: {metadata}；运行 python3 scripts/prepare_ref2va_metadata.py")
     cases, names, references, prompts = [], set(), {}, {}
+    identities = {}
     target = resolution_target(args.resolution) if args.resolution else None
     with metadata.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -202,10 +203,24 @@ def load_cases(args):
             raise base.BatchError(f"Ref2VA CSV 缺少列: {', '.join(sorted(missing))}")
         if not {"prompt_file", args.prompt_column}.intersection(reader.fieldnames or []):
             raise base.BatchError("Ref2VA CSV 需要 prompt_file（或旧版内联prompt）")
-        for index, row in enumerate(reader):
-            number = index + 2
+        rows = list(reader)
+        for index, row in enumerate(rows):
             if None in row or any(value is None for value in row.values()):
-                raise base.BatchError(f"CSV 第 {number} 行的列数与表头不一致")
+                raise base.BatchError(f"CSV 第 {index + 2} 行的列数与表头不一致")
+            for field in ("cat_id", "motion_id"):
+                if not metadata_tools.NAMED_ID.fullmatch(row[field]):
+                    raise base.BatchError(f"CSV 第 {index + 2} 行 {field} 必须是编号加英文名")
+        cat_ids, motion_ids = getattr(args, "cat_ids", None), getattr(args, "motion_ids", None)
+        for field, selectors, slug in (("cat_id", cat_ids, ""),
+                                       ("motion_id", motion_ids, "motion_slug")):
+            for selector in selectors or []:
+                if not any(metadata_tools.matches(r[field], [selector], r.get(slug, "")) for r in rows):
+                    raise base.BatchError(f"metadata 中找不到 {field}: {selector}")
+        for index, row in enumerate(rows):
+            if (not metadata_tools.matches(row["cat_id"], cat_ids)
+                    or not metadata_tools.matches(row["motion_id"], motion_ids, row["motion_slug"])):
+                continue
+            number = index + 2
             image = base.resolve_media_path(row[args.input_column], metadata.parent,
                                             field=args.input_column, row=number)
             reference_key = tuple(row.get(k, "") for k in (
@@ -217,9 +232,6 @@ def load_cases(args):
             image_stream = video_stream(image)
             if not image_stream.get("width") or not image_stream.get("height"):
                 raise base.BatchError(f"无法确定首帧尺寸: {image}")
-            for field in ("cat_id", "motion_id"):
-                if not re.fullmatch(r"[0-9]+-[a-z][a-z0-9-]*", row[field]):
-                    raise base.BatchError(f"CSV 第 {number} 行 {field} 必须是编号加英文名")
             if not re.fullmatch(r"[a-z][a-z0-9_]*", row["motion_slug"]):
                 raise base.BatchError(f"CSV 第 {number} 行 motion_slug 不合法")
             if not re.fullmatch(r"[0-9]+", row["id"]):
@@ -242,8 +254,20 @@ def load_cases(args):
                 if path not in prompts:
                     prompts[path] = path.read_text(encoding="utf-8").strip()
                 prompt = prompts[path]
-                if row.get("prompt_sha256") and hashlib.sha256(prompt.encode()).hexdigest() != row["prompt_sha256"]:
-                    raise base.BatchError(f"提示词文件已更新: {path}；请重新生成metadata")
+            if row.get("identity_prompt_file"):
+                if not row.get("prompt_file") or not row.get("prompt_sha256"):
+                    raise base.BatchError("身份metadata必须有 prompt_file 和组合后的 prompt_sha256")
+                try:
+                    identity_path = metadata_tools.resolve_file(
+                        row["identity_prompt_file"], metadata.parent, "identity_prompt_file")
+                    if identity_path not in identities:
+                        identities[identity_path] = metadata_tools.read_identity_prompts(identity_path)
+                    prompt = metadata_tools.compose_identity_prompt(
+                        prompt, identities[identity_path], row["cat_id"], media_digest(image))
+                except metadata_tools.MetadataError as exc:
+                    raise base.BatchError(f"CSV 第 {number} 行: {exc}") from exc
+            if row.get("prompt_sha256") and hashlib.sha256(prompt.encode()).hexdigest() != row["prompt_sha256"]:
+                raise base.BatchError(f"CSV 第 {number} 行提示词文件已更新（含身份组合）；请重新生成metadata")
             validate_prompt(prompt, number)
             seconds = base.validate_duration(base.parse_float(row[args.duration_column], field="duration_seconds", row=number), context="duration_seconds")
             if row.get("fps", "24") != "24":

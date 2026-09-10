@@ -1,0 +1,415 @@
+{
+  "schema_version": 1,
+  "prompt_version": "cat_identity.v1",
+  "prompt_status": "pending_model_validation",
+  "review_basis": "All 80 actual cat images were visually reviewed. Descriptions prioritize visible coat, face, eyes, ears, paws and tail over breed-name assumptions. Anatomical right/left is specified for odd-colored eyes; other directional markings refer to the frontal input image and remain attached to the same body regions during motion.",
+  "templates": {
+    "subject_definition": "<Subject 1> is the individual cat in <Picture 1>. {description} Its appearance comes exclusively from this image; <Video 1> supplies the movement and interaction timing.",
+    "retention": "<Subject 1> (appears throughout [Shot 1]): fully_preserved - Preserve {anchor}. Keep its face, natural anatomy and individual marking placement consistent through turns, fast motion, partial occlusion and settling. Transfer the reference movement onto this same individual.",
+    "opening": "[Shot 1] <Subject 1> begins seated in <Subject 2>, matching <Picture 1>'s viewpoint and initial placement. Clearly show {anchor}. Keep these features attached to the same anatomical regions as the pose changes; the studio illumination and floor remain consistent.",
+    "continuity": "Throughout this movement, <Subject 1> retains {anchor}.",
+    "closing": "Through the final frame, <Subject 1> retains {anchor}. Hold the specified ending pose with natural breathing, preserving this individual's face, proportions and markings."
+  },
+  "cats": {
+    "00-orange-shorthair-mackerel-tabby": {
+      "image_sha256": "c2a809e3691d8ad4edce11fef6880ae9ba35906711577f3d7dfbc9896a800c85",
+      "description": "A short-haired orange cat with narrow darker-orange tabby stripes, an M-shaped forehead marking, amber eyes, a pink nose, pale muzzle and chin, upright pointed ears, and a long ringed tail with a pale tip.",
+      "anchor": "the short orange coat, narrow orange tabby stripes, amber eyes, pink nose, and pale-tipped ringed tail"
+    },
+    "01-orange-shorthair-classic-tabby": {
+      "image_sha256": "585eecb51304410b14d3c57f86d1446eb978206d4639ad46fc80e9f77453198a",
+      "description": "A broad-faced short-haired golden-orange cat with strong dark-orange bands around the neck and forelegs, bold curved tabby markings, amber eyes, a pale muzzle and chin, upright ears, and a thick orange tail with broad dark rings.",
+      "anchor": "the broad face, bold dark-orange tabby bands, amber eyes, pale chin, and thick broadly ringed tail"
+    },
+    "02-orange-longhair": {
+      "image_sha256": "a408c9b6a14ce6b59929f02a5a44ae87db78a685be506d4cd0664ea9c26d5059",
+      "description": "A large long-haired orange cat with a full orange neck ruff, darker ginger forehead and leg stripes, amber eyes, a pinkish nose, tall tufted ears, and a very bushy orange tail with darker bands.",
+      "anchor": "the long ginger fur, full orange ruff, amber eyes, tufted ears, and bushy orange tail"
+    },
+    "03-cream-shorthair-tabby": {
+      "image_sha256": "6d2c908ea21f1881528a6cc53d8c9808a476404eca0d1714aa1f69567d416a3f",
+      "description": "A pale cream short-haired cat with faint beige tabby markings, a light muzzle, amber eyes, a pink nose and inner ears, upright ears, and a pale tail with soft beige rings.",
+      "anchor": "the pale cream short coat, faint beige stripes, amber eyes, pink nose, and softly ringed cream tail"
+    },
+    "04-cream-white-longhair": {
+      "image_sha256": "4b1ecf29dc8c19048245e3ac7d2afb99646ec3612b617d801828a328ae893fb7",
+      "description": "A fluffy cream-and-white cat with pale ginger patches on the crown and outer body, a broad white facial blaze, white muzzle, white chest ruff and paws, yellow-green eyes, a pink nose, and a fluffy cream tail.",
+      "anchor": "the cream-and-white long fur, broad white facial blaze and chest, white paws, and yellow-green eyes"
+    },
+    "05-orange-white-van-shorthair": {
+      "image_sha256": "48c59eaf1ce4f15b35b042447404937c43990e702fca39d3ff58455e16134c54",
+      "description": "A mostly white short-haired cat with orange patches over the crown beside a white central blaze, amber eyes, a pink nose, a white chest and legs, and an orange ringed full-length tail.",
+      "anchor": "the mostly white short coat and legs, orange crown patches and ringed tail, amber eyes, and pink nose"
+    },
+    "06-black-shorthair": {
+      "image_sha256": "52327100d95ec373be77299bed9938d6dee2dd5e1a9d15d85f77132a28c6ae3b",
+      "description": "A slender short-haired black cat with a sleek solid-black body, black nose and paws, pale yellow-green eyes, tall upright ears, a narrow face, and a long smooth black tail.",
+      "anchor": "the sleek solid-black coat, pale yellow-green eyes, narrow face, upright ears, and long black tail"
+    },
+    "07-odd-eyed-white-longhair": {
+      "image_sha256": "3761840fcdb51c33e87b47200ae5ca8ea980fa7dc6232bd44b94be7a4b004d4d",
+      "description": "A long-haired pure-white cat with a fluffy chest ruff and tail, a pink nose, and upright pink-lined ears. In the frontal image its own right eye on viewer-left is blue, and its own left eye on viewer-right is amber.",
+      "anchor": "the long pure-white fur, pink nose, blue right eye and amber left eye, and fluffy white tail"
+    },
+    "08-brown-shorthair-mackerel-tabby": {
+      "image_sha256": "497c0b0230a68ef1646120bf36a8c2a256467c28961a255c4b87fabe8f1eb387",
+      "description": "A short-haired warm-brown tabby with narrow black stripes, a distinct forehead M, green eyes, a pale muzzle and chin, a brownish-pink nose, upright ears, and a long black-ringed tail with a dark tip.",
+      "anchor": "the warm-brown short coat, narrow black tabby stripes, green eyes, pale chin, and black-tipped ringed tail"
+    },
+    "09-brown-shorthair-classic-tabby": {
+      "image_sha256": "20c5c91a97c4a37c81c48a1850011d38c2d286b661b9e6f7096e958bd4259986",
+      "description": "A broad-faced gray-brown short-haired tabby with heavy black chest bands and broad curved shoulder markings, yellow-green eyes, a pale chin, upright ears, a sturdy body, and a thick black-ringed tail.",
+      "anchor": "the broad gray-brown face, heavy black bands and curved markings, sturdy build, and thick ringed tail"
+    },
+    "10-silver-spotted-shorthair": {
+      "image_sha256": "c3e4983be5dd575e5f24b052e6b3c700160475d853f9e569f457fbf06180e9bc",
+      "description": "A slim silver-gray short-haired cat with many distinct dark spots on the chest and legs, black facial markings, green eyes, a pale muzzle, tall upright ears, and a long black-ringed tail with a dark tip.",
+      "anchor": "the silver short coat, distinct dark spots, green eyes, slender frame, and black-ringed tail"
+    },
+    "11-black-white-tuxedo": {
+      "image_sha256": "a0955713c149c45b4bf2fa7d551234401cfba0a12333655e47f387d5e1a67cc2",
+      "description": "A black-and-white short-haired cat with a black head and back, a narrow white central facial blaze, white muzzle and long chest bib, amber eyes, a pink nose, white paw socks, and a black tail with a white tip.",
+      "anchor": "the black coat, narrow white facial blaze and chest bib, white socks and tail tip, and amber eyes"
+    },
+    "12-calico-shorthair": {
+      "image_sha256": "f783ff449fb9c59d856f689da253bbd433c200f72e7d9dac404ded942cd5d375",
+      "description": "A short-haired calico with a black patch around the eye on viewer-left and an orange patch around the eye on viewer-right, a white central blaze, pink nose, yellow-green eyes, broad white chest and legs, and a black-and-orange tail.",
+      "anchor": "the asymmetric black-and-orange face, white blaze and legs, pink nose, and multicolored tail"
+    },
+    "13-dilute-calico-shorthair": {
+      "image_sha256": "88801b135c6c20357afb33c0f804a27e9e44c16b2018490db4057c177285ad6f",
+      "description": "A pale dilute-calico short-haired cat with cream and blue-gray face patches divided by a white blaze, amber eyes, a pink nose, a white chest and paw socks, gray-and-cream body patches, and a softly patterned full-length tail.",
+      "anchor": "the cream and blue-gray patches, white facial blaze and socks, amber eyes, and pink nose"
+    },
+    "14-black-tortoiseshell-shorthair": {
+      "image_sha256": "336504f40856aa5d516a3c634b4a5750cd04d531773d9f01e1fc25551a833a7b",
+      "description": "A dark short-haired tortoiseshell with irregular black and rust-orange mottling, a thin orange streak down the forehead and nose, amber eyes, upright dark ears, dark mottled paws, and a long black-and-orange tail.",
+      "anchor": "the black-and-rust tortoiseshell mottling, thin orange nose streak, amber eyes, and mottled dark paws"
+    },
+    "15-blue-cream-tortoiseshell-shorthair": {
+      "image_sha256": "053a2ba8fb7443e857656f4b37cc408e7d15b90fb32abaee6353399f252919e2",
+      "description": "A plush short-haired blue-gray-and-cream tortoiseshell with soft irregular pale patches, amber eyes, a gray nose, a round face, upright ears, and a full-length gray tail mottled with cream.",
+      "anchor": "the blue-gray and cream mottling, amber eyes, gray nose, round face, and softly mottled tail"
+    },
+    "16-abyssinian-ruddy": {
+      "image_sha256": "4a89e9b7e116a19ea6ae1bab5c3065b6d747d921eb0fbf8ccf092765bd603736",
+      "description": "A lean ruddy-brown short-haired cat with fine ticked fur, a darker forehead, large upright ears, green eyes, a pale muzzle, long slender legs, and a long tapering tail with a black tip.",
+      "anchor": "the fine ruddy ticked coat, green eyes, large ears, slender legs, and black-tipped tapering tail"
+    },
+    "17-somali-sorrel": {
+      "image_sha256": "ac0f07f26fc2c1fcfa561bd6647830be6fc8781025628e8fcdd3ef7b9fa3fda7",
+      "description": "A slender long-haired russet-orange cat with a darker forehead and facial outlines, yellow-green eyes, tall tufted ears, a full neck ruff, and a large brush-like reddish tail with a darker tip.",
+      "anchor": "the long russet fur, yellow-green eyes, tufted ears, neck ruff, and large reddish brush tail"
+    },
+    "18-bengal-rosetted": {
+      "image_sha256": "8494c06d1cc547ae47d30bd13817958da5fefb0a5d1b61f54049a64b879261e3",
+      "description": "A muscular golden-brown short-haired cat with dark rosette-like flank spots, bold black chest bands and facial outlines, green eyes, rounded upright ears, and a thick dark-ringed tail with a black tip.",
+      "anchor": "the golden coat, dark rosettes and chest bands, green eyes, muscular build, and thick ringed tail"
+    },
+    "19-bengal-snow-marbled": {
+      "image_sha256": "278a326801a431abbb49cf9ccf5949a614fc0d74482b3b7fdb6285ad9cea1341",
+      "description": "A pale ivory short-haired cat with high-contrast brown marbled and banded markings, a pale muzzle, bright blue eyes, upright ears, marked forelegs, and a long brown-ringed tail.",
+      "anchor": "the pale ivory coat, brown marbled markings, blue eyes, patterned forelegs, and brown-ringed tail"
+    },
+    "20-egyptian-mau": {
+      "image_sha256": "0489111df51696b3222756fb2391c211711decb6b397bb64b171d2fb40bb9a87",
+      "description": "A slim silver-white short-haired spotted cat with black forehead lines, green eyes, a dark nose, tall upright ears, fine scattered dark spots on the chest and legs, and a full-length black-ringed tail.",
+      "anchor": "the silver-white spotted coat, green eyes, dark nose, tall ears, and full-length ringed tail"
+    },
+    "21-ocicat-tawny": {
+      "image_sha256": "e11d07a094aa80fc7e511b6b25e586384266582071d9fc7da6a05fe8d9e06fb8",
+      "description": "A tawny short-haired cat with small dark spots on its torso and legs, tabby facial outlines, amber eyes, a pale muzzle, tall upright ears, and a brown tail ending in a dark tip.",
+      "anchor": "the tawny spotted coat, amber eyes, pale muzzle, tall ears, and dark-tipped brown tail"
+    },
+    "22-savannah": {
+      "image_sha256": "f2a39dba2fd52678a74e23d0e1cb8268d6e0ab1bd15efd983f2716c0421d18b8",
+      "description": "A very tall slim sandy-gold cat with exceptionally large upright ears, a narrow face, amber eyes, long thin legs, many round black spots, dark chest markings, and a ringed tail with a black tip.",
+      "anchor": "the tall long-legged frame, oversized ears, sandy-gold coat, round black spots, and narrow face"
+    },
+    "23-maine-coon": {
+      "image_sha256": "308eb0c956bb86d70e17e67e6ba5b5c844ef3750b7eeb5aa89dd7d7e78c93f2e",
+      "description": "A large shaggy dark-brown tabby with a broad square muzzle, yellow-green eyes, tall ears with long black tufts, a heavy mane, striped legs, and an exceptionally bushy dark-ringed tail.",
+      "anchor": "the large shaggy brown-tabby body, square muzzle, long black ear tufts, heavy mane, and bushy tail"
+    },
+    "24-norwegian-forest-amber": {
+      "image_sha256": "27462683802ff560faa032221536680e4f8839ddefcbccd02df7956a275e7740",
+      "description": "A large amber-brown long-haired tabby with a triangular face, green eyes, pale muzzle, pointed tufted ears, a golden neck ruff, dark leg stripes, and a long feathered dark-tipped tail.",
+      "anchor": "the amber-brown long fur, triangular face, green eyes, golden ruff, and feathered tail"
+    },
+    "25-siberian-silver": {
+      "image_sha256": "a1091e6da65a22e7b06e394d5db754d1afeb4a0542563a3eb4c892e818e4f7ec",
+      "description": "A stocky long-haired silver-gray tabby with a broad fluffy face, green eyes, dark forehead stripes, a pale muzzle and ruff, sturdy striped legs, and a very bushy black-ringed tail.",
+      "anchor": "the plush silver-gray tabby fur, green eyes, broad fluffy face, pale ruff, and bushy ringed tail"
+    },
+    "26-neva-masquerade-seal-lynx-point": {
+      "image_sha256": "ce2f52e2c12c6b0a195d92be1430b56dd5f0558acbe7f21e173aa315c732c635",
+      "description": "A fluffy pale-cream cat with blue eyes, a brown-gray striped facial mask, darker ear points, a cream neck ruff, brown-ringed legs, and a thick dark-ringed plume tail.",
+      "anchor": "the pale cream long fur, blue eyes, striped facial mask and legs, and thick dark-ringed tail"
+    },
+    "27-ragdoll-blue-bicolor": {
+      "image_sha256": "9d4571480bd17e73e6e151713ac072a6d7b43b1eaf93cd388d6111eee14ce6d0",
+      "description": "A fluffy cream-and-blue-gray bicolor cat with bright blue eyes, gray ear points and cheek patches, a broad white inverted-V blaze, pink nose, white muzzle and chest, white paws, and a gray plume tail.",
+      "anchor": "the blue eyes, broad white facial blaze, gray ears and cheeks, white paws, and gray plume tail"
+    },
+    "28-birman-seal-point": {
+      "image_sha256": "559c734af0fe3e69609453b9d962b87daca1c0001589c99bb70914046b34f0b1",
+      "description": "A semi-long-haired cream cat with a deep seal-brown facial mask, dark ears and lower legs, bright blue eyes, dark nose, small white gloves on every visible paw, and a bushy dark-brown tail.",
+      "anchor": "the cream fur, seal-brown mask and legs, blue eyes, white paw gloves, and dark plume tail"
+    },
+    "29-persian-chinchilla": {
+      "image_sha256": "f919f659473c45335e0d0b430d0e8417d0308eb9f31799303fce5b61a291e3a5",
+      "description": "A round-faced fluffy silver-white cat with very pale gray shading, green eyes edged in dark lines, a short muzzle, small ears, a voluminous white chest ruff, and a large pale fluffy tail.",
+      "anchor": "the fluffy silver-white coat, round short-muzzled face, dark-outlined green eyes, and pale plume tail"
+    },
+    "30-exotic-shorthair-cream": {
+      "image_sha256": "de16316c55567e0ba403a52fe738b8cbac297321a9244a4cb250cf13337d3f15",
+      "description": "A stocky cream cat with dense plush short fur, a very round flat face, small rounded ears, large amber eyes, a small pink nose, thick short legs, and a thick rounded cream tail.",
+      "anchor": "the plush cream short fur, flat round face, small ears, large amber eyes, and thick short legs"
+    },
+    "31-turkish-angora": {
+      "image_sha256": "fc55063bf92b1983632fd535bc63a17aedf6189f3bb1932131193742bb29dbb3",
+      "description": "A slender white long-haired cat with a narrow face, pink nose, tall pointed ears, and a long feathery white tail. In the frontal image its own right eye on viewer-left is amber, and its own left eye on viewer-right is blue.",
+      "anchor": "the slender white long-haired body, amber right eye and blue left eye, pink nose, and feathery tail"
+    },
+    "32-turkish-van": {
+      "image_sha256": "bac8a36ca050913834f9375c84e7c69ea3312114a28a3a248936ef0086155d7e",
+      "description": "A long-haired mostly white cat with separate orange crown patches around a white center, amber eyes, a pink nose, a full white chest and legs, and a thick entirely orange plume tail.",
+      "anchor": "the mostly white long fur, orange crown patches and plume tail, amber eyes, and pink nose"
+    },
+    "33-himalayan-flame-point": {
+      "image_sha256": "0975545b2f7693d600ff2a88ecbd2b952777b4c1a27d7427b7c2e59b3a2797a9",
+      "description": "A compact fluffy cream cat with pale ginger shading on its flat round face, ears, paws, and thick tail, large blue eyes, a short pink nose, small ears, and a very full cream ruff.",
+      "anchor": "the fluffy cream coat, ginger-shaded flat face, blue eyes, short pink nose, and full ruff"
+    },
+    "34-siamese-seal-point": {
+      "image_sha256": "326ac3087fc7e49332ca3e6042ed5e155d9cb6b5aa2c59ecf3667ddb6c2bc13d",
+      "description": "A very slender short-haired cream cat with a deep seal-brown face mask, dark ears, paws, and long thin tail, bright blue eyes, a narrow wedge-shaped face, and tall pointed ears.",
+      "anchor": "the slender cream body, deep seal-brown mask and extremities, blue eyes, wedge face, and thin tail"
+    },
+    "35-balinese-seal-point": {
+      "image_sha256": "e56c1fea25365729e22f127383975b8510af3c1661b4d7f251be812196237512",
+      "description": "A slim semi-long-haired cream cat with a dark seal-brown mask, large pointed dark ears, blue eyes, dark paws, a narrow face, and a long feathery dark-brown tail.",
+      "anchor": "the slim cream body, seal-brown mask, blue eyes, pointed ears, dark paws, and feathery brown tail"
+    },
+    "36-burmese-sable": {
+      "image_sha256": "863faf0f1c163ccf397850876312a6a128a9f9be3a95b67281d829e4208d44ff",
+      "description": "A compact short-haired chocolate-brown cat with a deeper brown face and paws, golden-yellow eyes, a dark nose, rounded cheeks, upright ears, and a smooth full-length dark-brown tail.",
+      "anchor": "the smooth chocolate-brown coat, deeper brown face and paws, golden eyes, and dark nose"
+    },
+    "37-tonkinese-mink": {
+      "image_sha256": "959176c168db63b573f4c42aa7d19972afd02c6ff72c45276a8a53fc8b6de0f5",
+      "description": "A short-haired warm beige cat with a softly shaded taupe face, ears and legs, turquoise-blue eyes, a gray-brown nose, upright ears, a pale chin and throat, and a brown full-length tail.",
+      "anchor": "the warm beige coat, soft taupe facial shading, turquoise-blue eyes, pale throat, and brown tail"
+    },
+    "38-peterbald": {
+      "image_sha256": "900c31488fa07ee22dbe8d95598db3670ae9755b2cf7ec7f98cfb46e51aa0b2b",
+      "description": "A hairless gray-skinned cat with a narrow angular face, very large upright ears, pale green-gray eyes, a dark nose and muzzle, visible skin folds on the chest and legs, and a long bare tapering tail.",
+      "anchor": "the hairless gray skin, chest folds, angular face, oversized ears, pale eyes, and bare tapering tail"
+    },
+    "39-snowshoe": {
+      "image_sha256": "6ccaf895a1837bcc40bffdeb82dee4272eb785b951e2fefcbc2691faa394705f",
+      "description": "A short-haired cream-and-brown pointed cat with blue eyes, dark ears and cheek mask, a white central facial blaze and muzzle, pink nose, white chest and paw socks, and a dark tail with a pale tip.",
+      "anchor": "the blue eyes, brown cheek mask, white facial blaze and socks, pink nose, and pale-tipped dark tail"
+    },
+    "40-bombay": {
+      "image_sha256": "f18653578679fca8d4364021acc837bdc5a5c7aa14ea5bcb8f64d360274fcc0a",
+      "description": "A glossy solid-black short-haired cat with large copper-orange eyes, a rounded black face and nose, upright ears, strong straight forelegs, black paws, and a smooth full-length black tail.",
+      "anchor": "the glossy black coat, copper-orange eyes, rounded black face, black paws, and smooth black tail"
+    },
+    "41-british-shorthair-blue": {
+      "image_sha256": "11fa308a00acd2a065a542bf1afc87e482fdc31ec0e9f5e1d210b6cf2b62cff6",
+      "description": "A very stocky blue-gray short-haired cat with a dense plush coat, broad round cheeks, orange-copper eyes, a gray nose, small upright ears, thick straight legs, and a short-looking thick rounded tail.",
+      "anchor": "the dense blue-gray coat, broad round cheeks, orange-copper eyes, small ears, and thick legs and tail"
+    },
+    "42-british-shorthair-golden": {
+      "image_sha256": "b224d7952fd223bc2a918f013040cdbb6ae2cd46bf62584e2dd430612b2f3444",
+      "description": "A round-faced golden short-haired cat with green eyes, a pinkish nose edged darker, a pale cream muzzle and chest, darker forehead and back shading, small upright ears, and a thick dark-tipped ringed tail.",
+      "anchor": "the golden plush coat, green eyes, round cheeks, pale cream chest, and dark-tipped thick tail"
+    },
+    "43-british-longhair-lilac": {
+      "image_sha256": "081ee26640f1ad72ea3c9a460169323280dc0b91468f5d3a11e20fa6bb82cae5",
+      "description": "A plush long-haired pale lilac-gray cat with warm pinkish-gray fur, a broad round face, copper-brown eyes, a muted pink-gray nose, small ears, a full chest, and a thick fluffy lilac tail.",
+      "anchor": "the pale lilac-gray long fur, broad round face, copper-brown eyes, full chest, and fluffy lilac tail"
+    },
+    "44-chartreux": {
+      "image_sha256": "48ee2897d352be07c394ee04ec500b1a6e447fbc0ffaa03b19fc168e79d3c31d",
+      "description": "A sturdy slate-gray short-haired cat with dense even gray fur, bright orange eyes, a dark gray nose, a rounded muzzle, upright ears, straight strong legs, and a full-length gray tail.",
+      "anchor": "the even slate-gray coat, bright orange eyes, dark gray nose, sturdy body, and upright ears"
+    },
+    "45-russian-blue": {
+      "image_sha256": "bdb452f0786a9343c16b863be0e397229a663a940e80ce5e0d9f672af92672a2",
+      "description": "A lean silver-blue short-haired cat with bright green eyes, a narrow wedge-shaped face, large upright ears, a slate nose, long slim legs, and a long smooth tapering gray tail.",
+      "anchor": "the lean silver-blue body, bright green eyes, wedge-shaped face, large ears, and tapering gray tail"
+    },
+    "46-american-shorthair-silver-tabby": {
+      "image_sha256": "d8f69fae7708e6fe85320c4b31f53b51129d782af13c64d7c081e4ae2f3e098e",
+      "description": "A sturdy silver-white short-haired tabby with bold black forehead lines, broad black neck bands, curved dark shoulder markings, green eyes, a pale muzzle, upright ears, and a thick black-ringed tail.",
+      "anchor": "the silver-white coat, bold black bands and curved markings, green eyes, and thick ringed tail"
+    },
+    "47-american-wirehair": {
+      "image_sha256": "c51c2e4987610bed90868e8db04d2c3eae1e4c72fc0ea4d3e056f3253205417b",
+      "description": "An orange-and-white cat with visibly crimped wiry short fur, orange tabby forehead and limbs, amber eyes, a pink nose, a white muzzle and chest bib, white paw socks, and a rough-textured orange ringed tail.",
+      "anchor": "the crimped orange tabby fur, white muzzle and chest bib, white socks, amber eyes, and wiry tail"
+    },
+    "48-american-curl-longhair": {
+      "image_sha256": "966d640db2bceabbde058692f892975af091b43827a9b54c0f97b135707a67c0",
+      "description": "A pale silver-white semi-long-haired cat with naturally backward-curled ear tips, amber eyes, subtle gray forehead markings, a pinkish nose, a white chest, and a soft feathered gray-white tail.",
+      "anchor": "the backward-curled ear tips, silver-white fur, amber eyes, faint gray forehead marks, and feathered tail"
+    },
+    "49-scottish-fold": {
+      "image_sha256": "906502d0ce0f85c16021d63758d6665ce0ddf02de7aebe94ab4c5252d30c8332",
+      "description": "A round-faced short-haired blue-gray-and-cream cat with ears folded forward close to the head, large orange eyes, a gray nose, mottled cream facial patches, dark leg bands, and a full-length ringed tail.",
+      "anchor": "the folded ears, round face, orange eyes, blue-gray and cream coat, and full-length ringed tail"
+    },
+    "50-japanese-bobtail": {
+      "image_sha256": "980784b0d3daf84e273b3962dd04e63e37db0444475aad9f0a911565d54bb73b",
+      "description": "A mostly white short-haired calico with a black patch around the eye on viewer-left, orange around the eye on viewer-right, a white blaze and legs, amber eyes, pink nose, flank patches, and a short multicolored pompom tail.",
+      "anchor": "the white calico body, asymmetric black-and-orange face, amber eyes, white legs, and short pompom tail"
+    },
+    "51-kurilian-bobtail": {
+      "image_sha256": "1e00f63fdcd048d761667c1bbbb13ff67ac15f6fd2778c5a752c2919ed37bc1c",
+      "description": "A stocky brown tabby-and-white cat with green eyes, a broad white muzzle and chest bib, white forepaw socks, dark forehead and leg stripes, and a short thick curled tabby tail beside the haunch.",
+      "anchor": "the brown tabby coat, green eyes, broad white bib and socks, and short thick curled tail"
+    },
+    "52-manx-short-tail": {
+      "image_sha256": "0ea23b413e0a37112582a803d26476c310552c9494259795afdee29c568703c1",
+      "description": "A compact gray-tabby-and-white cat with amber eyes, a broad white central blaze and muzzle, gray nose, white chest and paws, gray striped sides and forelegs, and a visibly very short dark tail stub.",
+      "anchor": "the gray tabby-and-white coat, broad white blaze and chest, amber eyes, and very short tail stub"
+    },
+    "53-devon-rex": {
+      "image_sha256": "489734408a7fe88dfbaf86f2d6de40d124ba80c19af8779262a56704632da2fc",
+      "description": "A slender charcoal-gray cat with tightly rippled short curly fur, very large tall ears, green eyes, a small dark muzzle and nose, thin legs, and a long slender curly-coated tail.",
+      "anchor": "the charcoal-gray rippled coat, oversized ears, green eyes, slim legs, and slender gray tail"
+    },
+    "54-selkirk-rex-longhair": {
+      "image_sha256": "75f456c1b8ec534c369683155c1f576049e5f9e839ca0a438d772d29a17df88b",
+      "description": "A stocky chocolate-brown-and-white long-haired cat with dense curly fur, a broad brown face, amber eyes, white muzzle patches, a large curly white chest bib, white paws, and a bushy brown curly tail.",
+      "anchor": "the dense chocolate-and-white curls, amber eyes, broad brown face, white bib and paws, and curly tail"
+    },
+    "55-laperm-longhair": {
+      "image_sha256": "9d8beaa120fd4dc0810dcdf57eed3114ce0778b4f9d75b3c94afd1fd6a9d628a",
+      "description": "A pale beige-gray long-haired cat with loose curls and ringlets, green eyes, a narrow softly marked face, upright ears, a large cream curly chest ruff, and a long feathery curled-fur tail.",
+      "anchor": "the loose beige-gray curls, green eyes, narrow face, cream curly ruff, and feathery tail"
+    },
+    "56-chinese-domestic-dark-brown-tabby": {
+      "image_sha256": "d0b80bf409c05724bc6dbd2c25ab89f6dc2c37ae970e73bffe284f948641b80f",
+      "description": "A short-haired muted dark-brown tabby with narrow black body stripes, black neck bands, a forehead M, green eyes, a pale chin, upright ears, and a full-length black-ringed tail.",
+      "anchor": "the muted dark-brown short coat, narrow black stripes, green eyes, pale chin, and ringed tail"
+    },
+    "57-chinese-domestic-golden-brown-tabby": {
+      "image_sha256": "005788b0c37e5ebf5a5f59ba429fc9874505430125e129e1a024fbf3da3831c1",
+      "description": "A short-haired golden-brown tabby with amber eyes, a brownish-pink nose, dark forehead M and chest bands, warm gold cheeks and legs, upright ears, and a long dark-ringed tail.",
+      "anchor": "the warm golden-brown coat, amber eyes, dark forehead and chest markings, and long ringed tail"
+    },
+    "58-chinese-domestic-tabby-white": {
+      "image_sha256": "22824c8dde82a3addfcb466e511375a5ac7990f0516946beaa84f9982fbb9cac",
+      "description": "A brown tabby-and-white short-haired cat with green eyes, tabby crown and cheeks, a pale central muzzle, a broad white chest bib, long white forepaw socks, brown striped sides, and a ringed tail.",
+      "anchor": "the tabby crown and sides, green eyes, broad white bib, long white socks, and ringed tail"
+    },
+    "59-chinese-domestic-high-white-black": {
+      "image_sha256": "a48b442eea37a1f804bd5333f43cba06a51f9e6768db93ed19dd05660798edd5",
+      "description": "A mostly white short-haired cat with a black cap and eye patches divided by a white blaze, yellow-green eyes, pink nose, a few black back and side patches, white chest and legs, and a long black tail.",
+      "anchor": "the mostly white body and legs, black head and side patches, pink nose, and long black tail"
+    },
+    "60-chinese-domestic-balanced-black-white": {
+      "image_sha256": "66d8116dab55a371f44ea6bcc66ab67e3535de12ad8a69a4d76b6a4fbd730a26",
+      "description": "A short-haired black-and-white cat with strongly asymmetric facial coloring: the eye on viewer-left lies in white fur, while the eye on viewer-right lies in a black patch. It has amber eyes, a white chest and legs, broad black side patches, and a black tail.",
+      "anchor": "the asymmetric half-white half-black face, amber eyes, white chest and legs, broad black patches, and black tail"
+    },
+    "61-chinese-domestic-moustache-black-white": {
+      "image_sha256": "6507907bc8266958a1140eda6e97e8a326d2e25cd266c30de5512a0ba1e9f3a8",
+      "description": "A mostly white short-haired cat with a distinct small black moustache patch beneath the nose, a black patch over the ear and eye area on viewer-left, amber eyes, scattered black side patches, white paws, and a black tail.",
+      "anchor": "the black moustache marking, asymmetric head patch, amber eyes, mostly white body and paws, and black tail"
+    },
+    "62-chinese-domestic-high-white-calico": {
+      "image_sha256": "d237c55df7248c701e56afa47ec26ff9dc628990585e8cf2ff78a589fec0a04e",
+      "description": "A mostly white short-haired calico with small orange and black crown patches, yellow-green eyes, a pink nose, a white face center, broad white chest and legs, sparse colored side patches, and a tricolor ringed tail.",
+      "anchor": "the high-white calico coat, small colored crown and side patches, white legs, pink nose, and tricolor tail"
+    },
+    "63-chinese-domestic-balanced-calico": {
+      "image_sha256": "89f9cc2071398576aeceb5c0c32ef366a2291a906e6e10db22afaa7a316076bb",
+      "description": "A short-haired calico with orange around the eye on viewer-left and black around the eye on viewer-right, a white central blaze and muzzle, green eyes, pink nose, white chest and legs, broad orange-black sides, and a tricolor tail.",
+      "anchor": "the orange-left and black-right facial patches in the frontal image, green eyes, white blaze and legs, and tricolor sides"
+    },
+    "64-chinese-domestic-low-white-calico": {
+      "image_sha256": "76c2cb26ea1737001f0a271bc9902db24413caa005362a9c0f1d8ca94f79a561",
+      "description": "A dark short-haired calico with black around the eye on viewer-left and orange around the eye on viewer-right, green eyes, a dark nose, a small white muzzle and chest bib, white toes, and bold orange-black body patches.",
+      "anchor": "the dark calico body, asymmetric black-and-orange face, green eyes, small white bib, and white toes"
+    },
+    "65-siamese-blue-point": {
+      "image_sha256": "40f1e31a0f116249f3e182cefda068abd5169ef38c086c516e21aa8a2cc72af5",
+      "description": "A slender short-haired ivory cat with a smooth blue-gray face mask, gray ears, lower legs and long tail, bright blue eyes, a gray nose, large pointed ears, and a narrow wedge face.",
+      "anchor": "the ivory body, blue-gray mask and extremities, bright blue eyes, gray nose, and large pointed ears"
+    },
+    "66-siamese-chocolate-point": {
+      "image_sha256": "644e49993e9830c8dd23a902b571029fcfec1961117fa2e059096163e5008218",
+      "description": "A slim short-haired warm ivory cat with a milk-chocolate face mask, brown ears, paws and thin tail, bright blue eyes, a brown nose, and large upright ears.",
+      "anchor": "the warm ivory body, chocolate mask and extremities, blue eyes, brown nose, and thin brown tail"
+    },
+    "67-abyssinian-sorrel": {
+      "image_sha256": "283d9227acc38404a95410285715c1e7745173a8b41389d94fcccea55b457ca5",
+      "description": "A lean cinnamon-russet short-haired cat with fine ticked fur, amber eyes, a small warm-brown nose, a pale chin, very large pointed ears, long slender legs, and a tapering reddish tail with a darker tip.",
+      "anchor": "the cinnamon-russet ticked fur, amber eyes, large pointed ears, slender legs, and dark-tipped reddish tail"
+    },
+    "68-russian-blue": {
+      "image_sha256": "b004b8924c930ecf84af4d1b0f354699f28d7bef6866d395547e2984b474514d",
+      "description": "A slim smooth blue-gray short-haired cat with vivid green eyes, a narrow angular muzzle, tall upright ears, a dark gray nose, long lean legs, and a long tapering gray tail.",
+      "anchor": "the smooth blue-gray fur, vivid green eyes, angular muzzle, tall ears, and long lean frame"
+    },
+    "69-british-shorthair-deep-blue": {
+      "image_sha256": "f952ea4ded2aa582078fca52ee766b1151423d02324a58e857c275a4ad8f0b57",
+      "description": "A stocky deep blue-gray short-haired cat with a broad round face, dense plush dark-gray fur, vivid orange eyes, a dark gray nose, small upright ears, thick legs, and a thick rounded gray tail.",
+      "anchor": "the deep blue-gray plush coat, broad round face, vivid orange eyes, small ears, and thick tail"
+    },
+    "70-blue-eyed-white-shorthair": {
+      "image_sha256": "93f611721ed6521d99ed0cd0a28284d071245a51289da02d13dc908adc499e3f",
+      "description": "A pure-white short-haired cat with bright blue eyes, a pink nose and inner ears, a narrow face, upright pointed ears, slim white legs, and a long smooth white tail.",
+      "anchor": "the pure-white short coat, blue eyes, pink nose, upright ears, and long smooth white tail"
+    },
+    "71-amber-eyed-white-shorthair": {
+      "image_sha256": "00c3deef99f2daf2126caf9df48f012551fabaf13cf09e648b755979f3bdc1a9",
+      "description": "A pure-white plush short-haired cat with amber eyes, a pink nose and inner ears, a broad soft face, upright ears, sturdy white legs, and a thick white tail.",
+      "anchor": "the plush pure-white coat, amber eyes, pink nose, broad face, and thick white tail"
+    },
+    "72-split-face-tortoiseshell-shorthair": {
+      "image_sha256": "aef4b298717791e0a999230e0a9a0f99e54fdc28e166c0dbde26b4eceb5d578c",
+      "description": "A short-haired black-and-orange tortoiseshell with a sharply divided face: orange around the eye on viewer-left and black around the eye on viewer-right. It has green eyes, a dark nose, mottled black-orange chest and legs, and a ringed mottled tail.",
+      "anchor": "the sharply divided orange-and-black face, green eyes, dark nose, and black-orange mottled body"
+    },
+    "73-american-shorthair-silver-tabby-white": {
+      "image_sha256": "788b30b02f9e29b2d238af6f40b1b083f41dc8322af2249a7ca892133d2f395b",
+      "description": "A silver tabby-and-white short-haired cat with green eyes, a pale pinkish nose, black forehead and cheek lines, a white chest and belly, white paw socks, bold black side markings, and a thick ringed tail.",
+      "anchor": "the silver-black tabby coat, green eyes, white chest and socks, bold side markings, and thick ringed tail"
+    },
+    "74-american-shorthair-brown-classic-tabby": {
+      "image_sha256": "24d6cb86ac40375c1cd0f9e94f9b1dee0ea1718194288432cfe5ac83e8d5f35d",
+      "description": "A sturdy brown short-haired tabby with amber eyes, a broad muzzle, dark forehead and neck bands, bold curved black shoulder and body markings, upright ears, and a thick dark-ringed tail.",
+      "anchor": "the sturdy brown-tabby body, amber eyes, broad muzzle, bold curved black markings, and thick ringed tail"
+    },
+    "75-british-shorthair-deep-golden-shaded": {
+      "image_sha256": "f74896b7fcbd8673e1214807c9c91b4efb35a9b3af48e6b85811388855561caa",
+      "description": "A round-faced plush short-haired deep-golden cat with green eyes, a pinkish nose, cream muzzle and chest, darker shading on the crown and back, small upright ears, and a thick dark-tipped ringed tail.",
+      "anchor": "the deep-golden plush coat, green eyes, round face, cream chest, and thick dark-tipped tail"
+    },
+    "76-british-shorthair-light-golden-shaded": {
+      "image_sha256": "3a72e0e0795a8ee545e273e541d271ca3721c724f51f70b29183a2a0d78fe19a",
+      "description": "A round-faced plush short-haired pale-golden cat with green eyes, a pink nose, a cream muzzle and chest, soft tan forehead shading, small ears, and a thick pale tail with darker rings and tip.",
+      "anchor": "the pale-golden plush coat, green eyes, pink nose, cream face and chest, and softly ringed thick tail"
+    },
+    "77-british-shorthair-silver-shaded": {
+      "image_sha256": "82b5903f3b955b3ebe5796cf2b36079bd427505f9bdc6fcfb51ec2720873ee2c",
+      "description": "A round-faced plush silver-white short-haired cat with bright green eyes, a pinkish nose, pale gray forehead and back shading, small upright ears, sturdy legs, and a thick pale-gray ringed tail.",
+      "anchor": "the plush silver-white coat, bright green eyes, round face, pale gray shading, and thick ringed tail"
+    },
+    "78-devon-rex-cream-tabby": {
+      "image_sha256": "5be6f6fec6da28e8bd9cc77be0493912d03a055ee067caa1c26eef5012f1cc15",
+      "description": "A slender pale cream-orange cat with close wavy short fur, faint orange tabby markings, very large upright ears, amber eyes, a pink nose, slim legs, and a slender cream-and-orange ringed tail.",
+      "anchor": "the wavy cream-orange coat, faint tabby markings, oversized ears, amber eyes, and slender ringed tail"
+    },
+    "79-maine-coon-silver-tabby": {
+      "image_sha256": "09aad4d12641dff45ee88c3caab004845990b1532f2c1bfc9a844c9ffb11823a",
+      "description": "A large long-haired silver-and-black tabby with a square muzzle, yellow-green eyes, very tall black-tufted ears, a heavy pale chest ruff, dark leg bands, and a long bushy silver-black tail.",
+      "anchor": "the large silver-black tabby body, square muzzle, tall black ear tufts, pale ruff, and bushy tail"
+    }
+  }
+}

@@ -287,6 +287,98 @@ class RefInferenceTest(unittest.TestCase):
                        reference_video="prepared/source.motion.mp4", reference_duration_seconds="4")
         self.write_rows()
 
+    def use_identity_metadata(self):
+        self.use_compact_metadata()
+        prompt_dir = Path(entry.__file__).resolve().parents[1] / "exp_Ref2VA/prompts"
+        config = json.loads((prompt_dir / "cat_identity.v1.json").read_text())
+        cat_ids = ("00-orange-shorthair-mackerel-tabby", "38-peterbald")
+        # PNG decoders ignore trailing bytes; give the second fixture a distinct
+        # file hash without adding another image-generation dependency.
+        (self.root / "second.png").write_bytes((self.root / "猫.png").read_bytes() + b"second cat fixture")
+        for i, row in enumerate(self.rows):
+            cat_id = cat_ids[i // 2]
+            motion_slug = "drag_ear" if i % 2 == 0 else "drag_ear_mirror"
+            motion_id = "02-pull-left-ear" if i % 2 == 0 else "03-drag-ear-mirror"
+            image_name = "../猫.png" if i // 2 == 0 else "../second.png"
+            prompt_name = f"{motion_slug}.v1.en.txt"
+            shutil.copyfile(prompt_dir / prompt_name, self.output / prompt_name)
+            config["cats"][cat_id]["image_sha256"] = ref.media_digest(self.output / image_name)
+            row.update(cat_id=cat_id, input_image=image_name, seed="0", motion_id=motion_id,
+                       motion_slug=motion_slug, prompt_file=prompt_name,
+                       prompt_version=f"{motion_slug}.v1+cat_identity.v1",
+                       identity_prompt_file="cat_identity.v1.json",
+                       output_name=f"{i:03d}_{cat_id}_{motion_id}_seed-0")
+            prompt = ref.metadata_tools.compose_identity_prompt(
+                (self.output / prompt_name).read_text().strip(), config, cat_id,
+                config["cats"][cat_id]["image_sha256"])
+            row["prompt_sha256"] = hashlib.sha256(prompt.encode()).hexdigest()
+        config["cats"] = {cat_id: config["cats"][cat_id] for cat_id in cat_ids}
+        path = self.output / "cat_identity.v1.json"
+        path.write_text(json.dumps(config))
+        self.write_rows()
+        return path, config
+
+    def test_identity_selected_cat_then_full_locked_batch_submits_exact_prompts_and_resumes(self):
+        _, config = self.use_identity_metadata()
+        before = {p.relative_to(self.root) for p in self.root.rglob("*")}
+        args = self.args("--dry-run", "--lock-first-frame")
+        cases = ref.load_cases(args)
+        selected = ref.load_cases(self.args("--dry-run", "--lock-first-frame", "--cat-ids", "38"))
+        self.assertEqual([c.name for c in selected], [c.name for c in cases[2:]])
+        self.assertEqual([c.request_fingerprint for c in selected],
+                         [c.request_fingerprint for c in cases[2:]])
+        limited = ref.load_cases(self.args("--dry-run", "--cat-ids", "38", "--limit", "1"))
+        self.assertEqual(limited[0].index, 2)
+        motion = ref.load_cases(self.args("--dry-run", "--motion-ids", "drag_ear_mirror"))
+        self.assertEqual([c.index for c in motion], [1, 3])
+        self.assertEqual(before, {p.relative_to(self.root) for p in self.root.rglob("*")})
+        self.assertEqual(len({c.prompt for c in cases}), 4)
+        for case in cases:
+            self.assertIn(config["cats"][case.cat_id]["description"], case.prompt)
+            self.assertEqual(hashlib.sha256(case.prompt.encode()).hexdigest(), case.source_row["prompt_sha256"])
+        with servers() as instances:
+            self.assertEqual(self.run_on(instances[:1], "--cat-ids", "38", "--lock-first-frame"), 0)
+            self.assertEqual(len(instances[0].submitted), 2)
+            self.assertEqual(self.run_on(instances[:1], "--lock-first-frame"), 0)
+            self.assertEqual(self.run_on(instances[:1], "--lock-first-frame"), 0)
+            submitted = instances[0].submitted
+            self.assertEqual(len(submitted), 4)
+            self.assertEqual({r["prompt"] for r in submitted}, {c.prompt for c in cases})
+            for request in submitted:
+                self.assertEqual([c["role"] for c in request["conditions"]],
+                                 ["keyframe", "reference", "reference"])
+                self.assertEqual(request["conditions"][0]["frame_index"], 0)
+                self.assertEqual(request["conditions"][0]["uri"], request["conditions"][1]["uri"])
+
+    def test_identity_edits_image_swap_or_missing_identity_column_reject_stale_metadata(self):
+        path, config = self.use_identity_metadata()
+        original = path.read_text()
+        cat_id = self.rows[0]["cat_id"]
+        config["cats"][cat_id]["anchor"] += ", test edit"
+        path.write_text(json.dumps(config))
+        with self.assertRaisesRegex(base.BatchError, "提示词文件已更新"):
+            ref.load_cases(self.args("--dry-run"))
+        path.write_text(original)
+        self.rows[0]["input_image"] = self.rows[2]["input_image"]
+        self.write_rows()
+        with self.assertRaisesRegex(base.BatchError, "image_sha256 不符"):
+            ref.load_cases(self.args("--dry-run"))
+        self.rows[0]["input_image"] = "../猫.png"
+        for row in self.rows:
+            del row["identity_prompt_file"]
+        self.write_rows()
+        with self.assertRaisesRegex(base.BatchError, "提示词文件已更新"):
+            ref.load_cases(self.args("--dry-run"))
+
+    def test_unknown_identity_selection_fails_before_media_preparation(self):
+        self.use_identity_metadata()
+        for selection in (("--cat-ids", "99"), ("--motion-ids", "jump")):
+            with self.subTest(selection=selection), \
+                    mock.patch.object(ref, "resolve_reference") as prepare_media, \
+                    self.assertRaisesRegex(base.BatchError, "找不到"):
+                ref.load_cases(self.args(*selection))
+            prepare_media.assert_not_called()
+
     def test_fresh_checkout_dry_run_writes_nothing_and_previews_are_opt_in(self):
         self.use_compact_metadata()
         before = {p.relative_to(self.root) for p in self.root.rglob("*")}

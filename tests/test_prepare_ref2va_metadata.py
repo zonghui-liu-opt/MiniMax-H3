@@ -56,12 +56,86 @@ class PrepareRef2VATest(unittest.TestCase):
     def write_config(self):
         self.motions.write_text(json.dumps(self.config), encoding="utf-8")
 
-    def run_prepare(self, output=None, seeds=None, cats=None, motions=None):
+    def run_prepare(self, output=None, seeds=None, cats=None, motions=None, identity=None):
         with patch.object(prepare, "validate_reference", return_value=({}, 4.0)):
             return prepare.prepare_metadata(self.motions, self.catalog, self.cat_dir,
                                             output or self.output,
                                             seeds if seeds is not None else [0, 10000, 20000],
-                                            cats, motions)
+                                            cats, motions, identity_prompts=identity)
+
+    def identity_catalog(self):
+        config = json.loads((ROOT / "exp_Ref2VA/prompts/cat_identity.v1.json").read_text())
+        cats = prepare.read_catalog(self.catalog, self.cat_dir)
+        config["cats"] = {cat["cat_id"]: {**config["cats"][cat["cat_id"]],
+                           "image_sha256": prepare.sha256(cat["image"])} for cat in cats}
+        path = self.experiment / "cat_identity.v1.json"
+        path.write_text(json.dumps(config))
+        return path, config
+
+    def test_identity_prompts_are_per_cat_reuse_motion_and_rebase_in_subsets(self):
+        path, config = self.identity_catalog()
+        legacy = self.run_prepare(seeds=[0])
+        original_motion = self.prompt.read_bytes()
+        rows = self.run_prepare(identity=path, seeds=[0])
+        self.assertEqual([r["output_name"] for r in legacy], [r["output_name"] for r in rows])
+        self.assertEqual(len({r["prompt_file"] for r in rows}), 1)
+        self.assertEqual(len({r["prompt_sha256"] for r in rows}), 2)
+        self.assertEqual(self.prompt.read_bytes(), original_motion)
+        for row, old in zip(rows, legacy):
+            self.assertNotIn("prompt", row)
+            self.assertEqual(row["identity_prompt_file"], path.name)
+            self.assertEqual(row["prompt_version"], "drag_ear.v1+cat_identity.v1")
+            prompt = prepare.compose_identity_prompt(self.prompt.read_text().strip(), config,
+                         row["cat_id"], prepare.sha256(self.experiment / row["input_image"]))
+            self.assertEqual(row["prompt_sha256"], hashlib.sha256(prompt.encode()).hexdigest())
+            self.assertNotEqual(row["prompt_sha256"], old["prompt_sha256"])
+            self.assertIn(config["cats"][row["cat_id"]]["description"], prompt)
+            for paragraph in self.prompt.read_text().splitlines():
+                if paragraph.startswith(("During approximately", "Around 1.3", "Through approximately", "By approximately")):
+                    self.assertIn(paragraph, prompt)
+        subset = self.experiment / "nested/smoke.csv"
+        prepare.write_metadata(subset, rows[:1], relative_to=self.experiment)
+        with subset.open() as handle:
+            row = next(csv.DictReader(handle))
+        self.assertEqual((subset.parent / row["identity_prompt_file"]).resolve(), path.resolve())
+        self.assertEqual(row["prompt_sha256"], rows[0]["prompt_sha256"])
+
+    def test_identity_missing_wrong_image_invalid_template_and_output_collision_fail_closed(self):
+        path, original = self.identity_catalog()
+        self.output.write_text("existing metadata")
+        for failure in ("missing", "image", "template", "version"):
+            config = json.loads(json.dumps(original))
+            cat_id = next(iter(config["cats"]))
+            if failure == "missing":
+                del config["cats"][cat_id]
+            elif failure == "image":
+                config["cats"][cat_id]["image_sha256"] = "0" * 64
+            elif failure == "template":
+                config["templates"]["opening"] = "{unknown}"
+            else:
+                config["schema_version"] = 2
+            path.write_text(json.dumps(config))
+            with self.subTest(failure=failure), self.assertRaises(prepare.MetadataError):
+                self.run_prepare(identity=path)
+            self.assertEqual(self.output.read_text(), "existing metadata")
+        path.write_text(json.dumps(original))
+        with self.assertRaisesRegex(prepare.MetadataError, "不能覆盖"):
+            self.run_prepare(output=path, identity=path)
+        self.assertEqual(json.loads(path.read_text()), original)
+
+    def test_identity_cli_smoke_and_registered_motion_wildcard(self):
+        path, _ = self.identity_catalog()
+        (self.experiment / "Ref_new.mp4").write_bytes(b"unregistered")
+        smoke = self.experiment / "nested/smoke.csv"
+        with patch.object(prepare, "validate_reference", return_value=({}, 4.0)):
+            self.assertEqual(prepare.main(self.cli_args(
+                "--identity-prompts", str(path), "--motion-ids", "*",
+                "--smoke-output", str(smoke), "--smoke-cat-id", "38")), 0)
+        with smoke.open() as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["cat_id"], "38-peterbald")
+        self.assertEqual((smoke.parent / rows[0]["identity_prompt_file"]).resolve(), path.resolve())
 
     def test_explicit_seeds_stable_names_and_portable_paths(self):
         rows = self.run_prepare()

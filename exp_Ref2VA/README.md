@@ -2,7 +2,54 @@
 
 复用已在内网 H100×8 跑通的 `infer_ref2va_8gpu.sh`，不新增推理入口或环境依赖。当前共 **12 个参考视频 × 80 个猫咪 ID × seed 0 = 960 条任务**。包含原 `drag_ear` 对照和 11 个新增参考；镜像视频独立计数。新增提示词已按实际视频审阅并使用官方 `h3-prompt-writing` 六段格式，生成效果均待内网模型验证。
 
-## 先预览，再批量生成
+## 按首帧猫咪 ID 定制 prompt（cat_identity.v1，待模型验证）
+
+逐张审阅80张首帧，分别描述毛色、花纹分布、眼色、脸型、耳形、被毛/裸肤和可见尾部特征。身份来自实际图像，不仅依据品种名。例如00保留橘色虎斑纹，38保留灰色裸肤和大耳；07与31的异瞳左右不同，镜像动作也不翻转这些身份特征。
+
+只新增一份 `prompts/cat_identity.v1.json`（80份身份描述及共用组合模板），复用12份现有动作prompt。生成器与推理入口使用同一个组合函数，将具体身份写入主体定义、保留策略、开场、动作中段和结尾，保留动作时间线、玩具、方向和结束姿态。实际提交的是每只猫各自的完整英文六段prompt；没有复制960份文本文件，也没有新增推理入口或环境依赖。
+
+| 文件 | 用途 |
+| --- | --- |
+| `prompts/cat_identity.v1.json` | 80只猫的独立描述、身份锚点、所审阅猫图SHA256 |
+| `metadata_identity_v1.csv` | 80猫 × 12个已登记动作 × seed 0，共960条 |
+| `metadata_identity_v1_smoke.csv` | 猫咪00覆盖12动作，任务名与新全量表一致 |
+
+在内网工程根目录执行，以下复用已运行的Ref2VA服务；需要启动服务则追加 `--start-servers --model-path /path/to/MiniMax-H3`。先确认下节记录的服务端keyframe兼容问题已经解决，再提交锁帧实验。
+
+```bash
+# 检查指定猫的12个动作输入；00可换成38或其他ID，也可传多个ID
+bash infer_ref2va_8gpu.sh --metadata exp_Ref2VA/metadata_identity_v1.csv \
+  --cat-ids 00 --lock-first-frame \
+  --output-dir outputs/ref2va_identity_v1_lock --dry-run
+
+# 实际生成指定猫；保留原对照使用的resolution和其他采样参数
+bash infer_ref2va_8gpu.sh --metadata exp_Ref2VA/metadata_identity_v1.csv \
+  --cat-ids 00 --lock-first-frame \
+  --output-dir outputs/ref2va_identity_v1_lock
+
+# 效果确认后跑全量；保持参数与目录一致，跳过已完成的指定猫任务
+bash infer_ref2va_8gpu.sh --metadata exp_Ref2VA/metadata_identity_v1.csv \
+  --lock-first-frame --output-dir outputs/ref2va_identity_v1_lock
+```
+
+直接使用 `metadata_identity_v1_smoke.csv` 也可预览00号猫。`--cat-ids 00 38` 同时测两只；追加 `--motion-ids cat_teaser2 drag_yarn_ball_and_catch` 只测指定动作。推理筛选保持CSV中的任务名和seed，`--limit N` 在筛选后取前N条。要检查完整组合prompt，可在dry-run命令中显式追加 `--write-requests --limit 1`，阅读 `outputs/ref2va_identity_v1_lock/requests/<motion_slug>/*.json` 的 `prompt`；默认dry-run不写文件。
+
+新metadata的 `prompt_file` 引用原动作正文，`identity_prompt_file` 引用身份配置，按 `cat_id` 匹配；`prompt_sha256` 校验**组合后的完整文本**。猫图哈希必须与该ID的已审阅描述一致。换图、改描述或动作后，需审阅并重建metadata；不匹配会报错，不回退到统一prompt。新prompt与锁帧设置均改变请求指纹，使用新的输出目录保存对照。旧metadata与旧动作prompt保留，无参数推理仍读取原成功案例。
+
+需要调整时保留旧版，新建如 `cat_identity.v2.json` 并更新其中的 `prompt_version`；未实际推理验证继续标记 `pending_model_validation`。重建v1的命令如下；做v2时同时替换输入JSON和输出CSV文件名：
+
+```bash
+python3 scripts/prepare_ref2va_metadata.py \
+  --identity-prompts exp_Ref2VA/prompts/cat_identity.v1.json --motion-ids '*' \
+  --output exp_Ref2VA/metadata_identity_v1.csv \
+  --smoke-output exp_Ref2VA/metadata_identity_v1_smoke.csv
+```
+
+`--motion-ids '*'`（保留引号）显式选择12个已登记动作。当前本地新增的 `Ref_lie_down.mp4`、`Ref_lie_down_mirror.mp4` 尚未登记独立动作prompt，不混入本轮对照；不指定动作筛选时，生成器仍会提醒未登记视频。向前走视频已同步当前名称 `Ref_walk_forward_to_screen.mp4`，旧表和新表的原视频/静音缓存路径一致；文件内容与旧版动作prompt不变，旧请求指纹不受该重命名影响。
+
+本版只验证了输入、组合文本、请求协议和断点续跑。身份文字是生成条件，不能保证快速运动或遮挡中的ID保持；`--lock-first-frame` 还取决于服务端对混合关键帧条件的支持，真实效果仍待内网H100验证。
+
+## 旧版统一动作 prompt：先预览，再批量生成
 
 在内网工程根目录执行。沿用已跑通的 SGLang 环境和模型根目录；两个四卡副本共享任务队列，每个副本默认一个在途任务。
 
@@ -27,6 +74,32 @@ bash infer_ref2va_8gpu.sh --start-servers \
 
 若已有 Ref2VA 服务运行，去掉 `--start-servers` 即可复用默认30110/30112端口；也可用 `--server-urls http://127.0.0.1:30110 http://127.0.0.1:30112` 显式指定。需要连续调试时，终端A运行 `bash serve_ref2va_8gpu.sh --model-path /path/to/MiniMax-H3`，终端B运行上述推理命令并去掉 `--start-servers`，避免反复加载模型。脚本只管理自己启动的进程。
 
+## 启用猫咪 ID 图首帧约束
+
+客户端已实现 `--lock-first-frame` 的请求构造，但这不代表已跑通的内网服务支持该条件。2026-09-10内网实测返回 `task 'ref2va' does not allow condition role='keyframe' type='image'`，当前锁帧链路尚未跑通。该错误表示服务端任务规则拒绝Ref2VA混合关键帧；输入dry-run和本地模拟服务测试不能验证这项服务端能力。
+
+在支持混合条件的服务上，同一猫图保留为 `image/reference`（对应 `<Picture 1>`），并额外作为 `image/keyframe, frame_index=0` 提交；静音动作视频仍为 `video/reference`（对应 `<Video 1>`）。预期约束作用于第0帧的整张图，包括猫咪姿态、构图和背景，并不是单独增加身份参考权重；所用权重的适用性、后续帧的ID保持和动作效果均需在H100上验证。
+
+服务端兼容问题解决后，先用已跑通的历史 `drag_ear` 数据做一条对照：
+
+```bash
+# 只检查输入；不访问服务、不写请求预览
+bash infer_ref2va_8gpu.sh --lock-first-frame \
+  --metadata exp_Ref2VA/metadata.csv --limit 1 \
+  --output-dir outputs/ref2va_lock_first_frame --dry-run
+
+# 实际生成同一条，保留原seed及采样参数
+bash infer_ref2va_8gpu.sh --lock-first-frame \
+  --metadata exp_Ref2VA/metadata.csv --limit 1 \
+  --output-dir outputs/ref2va_lock_first_frame
+```
+
+需要自动启动服务时，在实际生成命令中追加 `--start-servers --model-path /srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3`。若原对照使用了 `--resolution` 或其他采样参数，锁帧实验保持相同设置。服务是否支持Ref2VA混合关键帧条件，以实际提交结果为准；客户端保留服务错误，不自动移除锁帧条件重试。
+
+定位上述报错时，先收集实际服务环境的SGLang版本/源码commit和完整traceback，再决定是否回移混合条件支持。[上游任务规则](https://github.com/sgl-project/sglang/blob/v0.5.19/python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/task_profiles.py)已有Ref2VA关键帧定义，但还需配套的请求校验、参考标签映射和关键帧条件传递，不能仅删除拒绝判断。暂不修改已跑通环境，不增加强制启动预检；只重启相同源码的服务或重复提交不会补齐能力。去掉参数可恢复普通Ref2VA，但不满足首帧约束目标；切换FL2VA也不能直接保留本请求的动作视频参考。
+
+历史80猫批量去掉 `--limit 1` 即可，沿用同一目录可跳过已完成的锁帧任务。12动作预览与全量分别使用 `metadata_smoke.csv`、`metadata_all.csv`，另用 `outputs/ref2va_v1_lock_first_frame`，两次都保留 `--lock-first-frame`。开启或关闭锁帧会改变请求指纹，不能直接复用未锁帧的旧输出目录，否则会报参数不一致。无需用 `--force` 覆盖对照结果。
+
 ## 动作、参考视频和结束状态
 
 所有目标请求均为4秒、24fps。逐个审阅了12个视频的3fps采样帧，并以6fps复核逗猫棒2的交叉前爪动作。镜像方向指**画面左右**；猫图本身不翻转，保留不对称花纹和自然耳尾特征。玩具作为独立参考主体保留，无可见操作者。
@@ -44,7 +117,7 @@ bash infer_ref2va_8gpu.sh --start-servers \
 | `drag_yarn_ball_and_catch_mirror` | `Ref_drag_yarn_ball_and_catch_mirror.mp4` | 球由画面右向左滚动，猫前扑并用双爪按住，站立俯身结束 | 80 |
 | `curl_up_and_lie_down` | `Ref_curl_up_and_lie_down.mp4` | 低头屈腿蜷卧，头在画面左侧，闭眼休息 | 80 |
 | `curl_up_and_lie_down_mirror` | `Ref_curl_up_and_lie_down_mirror.mp4` | 低头屈腿蜷卧，头在画面右侧，闭眼休息 | 80 |
-| `walk_forward_to_screen` | `walk_forward_to_screen.mp4` | 起身交替迈步靠近固定镜头，放大为近处站姿并略偏头 | 80 |
+| `walk_forward_to_screen` | `Ref_walk_forward_to_screen.mp4` | 起身交替迈步靠近固定镜头，放大为近处站姿并略偏头 | 80 |
 
 例如只生成起身追拍动作的80只猫：
 
@@ -62,6 +135,7 @@ bash infer_ref2va_8gpu.sh --metadata exp_Ref2VA/metadata/cat_teaser2.csv \
 - `data_h3/cat_ids/` 原有80张猫图；`cat_catalog.csv` 为ID与文件名映射。
 - 本目录上述12个原始MP4均已纳入Git，随 `data_pipeline` 分支一起同步，文件名与表格一致。蜷卧原视频统一命名为 `Ref_curl_up_and_lie_down.mp4`。
 - `motions.json`、`prompts/*.v1.en.txt`、`metadata_all.csv`、`metadata_smoke.csv` 和 `metadata/*.csv`。
+- 本次逐猫身份实验另需 `prompts/cat_identity.v1.json`、`metadata_identity_v1.csv` 和 `metadata_identity_v1_smoke.csv`。
 
 只维护一份推理实现、一份metadata生成器，以及按版本保存的动作提示词。metadata引用提示词文件并记录提示词/源视频哈希，不在960行里重复嵌入正文。静音参考、日志、state、请求预览、生成视频和清单均为忽略的运行产物；无需同步工程包、上游源码快照或静音副本。
 
@@ -90,7 +164,7 @@ python3 scripts/prepare_ref2va_metadata.py --cat-ids 00 02 38 \
   --output exp_Ref2VA/metadata_subset.csv
 ```
 
-生成器默认输出 `metadata_all.csv`，默认只有seed 0，不覆盖历史 `metadata.csv`。`--smoke-output` 从当前完整任务网格选取一只猫，`--per-motion-dir` 按动作拆分，保留任务名并自动重定位相对路径。`--cat-ids`、`--motion-ids` 支持数字编号或完整ID，动作也支持slug；`--smoke-cat-id` 必须属于本次所选猫。`--limit` 只取CSV前N条，不等于覆盖所有动作；预览优先直接使用12条的 `metadata_smoke.csv`。
+生成器未指定 `--identity-prompts` 时默认输出 `metadata_all.csv`，启用身份配置时默认输出 `metadata_identity_v1.csv`；默认只有seed 0，不覆盖历史 `metadata.csv`。`--smoke-output` 从当前完整任务网格选取一只猫，`--per-motion-dir` 按动作拆分，保留任务名并自动重定位相对路径。`--cat-ids`、`--motion-ids` 支持数字编号或完整ID，动作也支持slug；`--smoke-cat-id` 必须属于本次所选猫。推理 `--limit` 取筛选后的前N条，不等于覆盖所有动作；预览可直接使用相应版本的12条smoke表。
 
 同一动作配置和seed列表下，筛选不会改变任务编号。增减注册动作或seed列表会改变任务网格编号，需要同步重建对应的预览与拆分CSV并使用新输出目录。改变提示词、视频、分辨率或采样参数时也建议使用如 `outputs/ref2va_v2` 的新目录，保留前后效果对照。
 

@@ -148,7 +148,7 @@
       "motion_id": "13-walk-forward-to-screen",
       "motion_slug": "walk_forward_to_screen",
       "motion_name_zh": "起身向镜头走近并在近处站定",
-      "reference_video": "walk_forward_to_screen.mp4",
+      "reference_video": "Ref_walk_forward_to_screen.mp4",
       "prompt_file": "prompts/walk_forward_to_screen.v1.en.txt",
       "duration_seconds": 4,
       "reference_duration_seconds": 4.041699,
