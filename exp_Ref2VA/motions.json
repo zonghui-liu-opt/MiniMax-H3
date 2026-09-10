@@ -122,14 +122,14 @@
       "motion_id": "11-curl-up-and-lie-down",
       "motion_slug": "curl_up_and_lie_down",
       "motion_name_zh": "低头向画面左侧蜷卧并闭眼休息",
-      "reference_video": " Ref_curl_up_and_lie_down.mp4",
+      "reference_video": "Ref_curl_up_and_lie_down.mp4",
       "prompt_file": "prompts/curl_up_and_lie_down.v1.en.txt",
       "duration_seconds": 4,
       "reference_duration_seconds": 4,
       "fps": 24,
       "prompt_version": "curl_up_and_lie_down.v1",
       "prompt_status": "pending_model_validation",
-      "source_observation": "Reviewed 12 frames at 3 fps: seated head lowers 0-1s; chest and forelegs fold 1-2s; compact lying curl by 2.7s, head screen-left, rump screen-right, eyes closed to end. 4s, 24fps, 720x1280. Original unmirrored filename intentionally retains its leading space."
+      "source_observation": "Reviewed 12 frames at 3 fps: seated head lowers 0-1s; chest and forelegs fold 1-2s; compact lying curl by 2.7s, head screen-left, rump screen-right, eyes closed to end. 4s, 24fps, 720x1280."
     },
     {
       "motion_id": "12-curl-up-and-lie-down-mirror",
@@ -142,7 +142,7 @@
       "fps": 24,
       "prompt_version": "curl_up_and_lie_down_mirror.v1",
       "prompt_status": "pending_model_validation",
-      "source_observation": "Reviewed 12 frames at 3 fps: seated head lowers 0-1s; chest and forelegs fold 1-2s; compact lying curl by 2.7s, head screen-right, rump screen-left, eyes closed to end. 4s, 24fps, 720x1280. Original unmirrored filename intentionally retains its leading space."
+      "source_observation": "Reviewed 12 frames at 3 fps: seated head lowers 0-1s; chest and forelegs fold 1-2s; compact lying curl by 2.7s, head screen-right, rump screen-left, eyes closed to end. 4s, 24fps, 720x1280."
     },
     {
       "motion_id": "13-walk-forward-to-screen",

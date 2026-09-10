@@ -42,7 +42,7 @@ bash infer_ref2va_8gpu.sh --start-servers \
 | `cat_teaser3` | `Ref_cat_teaser3.mp4` | 双前爪抬起抓扑、随玩具下探落地，最后坐定 | 80 |
 | `drag_yarn_ball_and_catch` | `Ref_drag_yarn_ball_and_catch.mp4` | 球由画面左向右滚动，猫前扑并用双爪按住，站立俯身结束 | 80 |
 | `drag_yarn_ball_and_catch_mirror` | `Ref_drag_yarn_ball_and_catch_mirror.mp4` | 球由画面右向左滚动，猫前扑并用双爪按住，站立俯身结束 | 80 |
-| `curl_up_and_lie_down` | ` Ref_curl_up_and_lie_down.mp4`（文件名开头有一个空格） | 低头屈腿蜷卧，头在画面左侧，闭眼休息 | 80 |
+| `curl_up_and_lie_down` | `Ref_curl_up_and_lie_down.mp4` | 低头屈腿蜷卧，头在画面左侧，闭眼休息 | 80 |
 | `curl_up_and_lie_down_mirror` | `Ref_curl_up_and_lie_down_mirror.mp4` | 低头屈腿蜷卧，头在画面右侧，闭眼休息 | 80 |
 | `walk_forward_to_screen` | `walk_forward_to_screen.mp4` | 起身交替迈步靠近固定镜头，放大为近处站姿并略偏头 | 80 |
 
@@ -60,10 +60,12 @@ bash infer_ref2va_8gpu.sh --metadata exp_Ref2VA/metadata/cat_teaser2.csv \
 代码通过 `zonghui-liu-opt/MiniMax-H3` 的 `data_pipeline` 分支同步。输入使用相对CSV所在位置的路径，可整目录搬运，不依赖本地Mac绝对路径。需在内网保留：
 
 - `data_h3/cat_ids/` 原有80张猫图；`cat_catalog.csv` 为ID与文件名映射。
-- 本目录上述12个原始MP4均已纳入Git，随 `data_pipeline` 分支一起同步，文件名与表格一致。蜷卧原视频的前导空格已被CSV正确引用，无需重命名。
+- 本目录上述12个原始MP4均已纳入Git，随 `data_pipeline` 分支一起同步，文件名与表格一致。蜷卧原视频统一命名为 `Ref_curl_up_and_lie_down.mp4`。
 - `motions.json`、`prompts/*.v1.en.txt`、`metadata_all.csv`、`metadata_smoke.csv` 和 `metadata/*.csv`。
 
 只维护一份推理实现、一份metadata生成器，以及按版本保存的动作提示词。metadata引用提示词文件并记录提示词/源视频哈希，不在960行里重复嵌入正文。静音参考、日志、state、请求预览、生成视频和清单均为忽略的运行产物；无需同步工程包、上游源码快照或静音副本。
+
+蜷卧视频去除文件名前导空格后，原视频与静音缓存路径已在smoke、全量及单动作metadata中同步更新。新缓存 `prepared/Ref_curl_up_and_lie_down.motion.mp4` 在实际推理时自动准备。视频内容、动作提示词、任务编号和请求指纹保持不变，已有输出目录可以继续使用，已完成结果仍按原规则跳过。
 
 历史 `metadata.csv`（80条 `drag_ear`、seed 0、旧编号）及 `drag_ear.v1.en.txt` 保持原样。无参数的 `infer_ref2va_8gpu.sh` 仍沿用该成功案例；新任务请显式传入 `metadata_smoke.csv` 或 `metadata_all.csv`。新增全量网格的编号与历史网格不同，使用上述新输出目录。预览、按动作拆分和全量CSV之间的编号完全一致。
 

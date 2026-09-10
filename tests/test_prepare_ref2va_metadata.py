@@ -124,7 +124,7 @@ class PrepareRef2VATest(unittest.TestCase):
         self.assertEqual(len(self.run_prepare(motions=["drag_ear"])), 6)
 
     def test_unprefixed_and_space_prefixed_references_are_not_silently_skipped(self):
-        for filename in ("walk_forward_to_screen.mp4", " Ref_curl_up_and_lie_down.mp4"):
+        for filename in ("walk_forward_to_screen.mp4", " Ref_unregistered.mp4"):
             with self.subTest(filename=filename):
                 path = self.experiment / filename
                 path.write_bytes(b"new reference")
