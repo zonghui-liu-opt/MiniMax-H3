@@ -595,6 +595,20 @@ class RefInferenceTest(unittest.TestCase):
             self.assertFalse(instances[0].submitted)
             self.assertEqual(len(instances[1].submitted), 1)
 
+    def test_inflight_legacy_loopback_owner_resumes_without_resubmission(self):
+        with servers() as instances:
+            case = ref.load_cases(self.args("--limit", "1"))[0]
+            paths = ref.case_paths(self.output, case)
+            owner = f"http://127.0.01:{instances[0].server_port}"
+            base.atomic_write_json(paths.state, ref.state_payload(case, paths, status="queued",
+                                   server_url=owner, video_id="old-id"))
+            self.assertEqual(self.run_on(instances[:1], "--limit", "1"), 0)
+            self.assertIn("/v1/videos/old-id", instances[0].reads)
+            self.assertFalse(instances[0].submitted)
+            state = base.read_json(paths.state)
+            self.assertEqual(state["server_url"], f"http://127.0.0.1:{instances[0].server_port}")
+            self.assertTrue(base.looks_like_mp4(paths.video))
+
     def test_failed_job_requires_retry_flag_and_force_archives(self):
         with servers() as instances:
             instances[0].failure_prompt = PROMPT

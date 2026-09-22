@@ -18,15 +18,18 @@ import argparse
 import base64
 import concurrent.futures
 import csv
+import ipaddress
 import json
 import mimetypes
 import os
 import re
+import socket
 import sys
 import threading
 import time
 import unicodedata
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -363,6 +366,42 @@ def looks_like_mp4(path: Path) -> bool:
     return header[4:8] == b"ftyp"
 
 
+def _loopback_host(host: str) -> str | None:
+    """Recognize local literals without resolving arbitrary hostnames via DNS."""
+    if host.rstrip(".").lower() == "localhost":
+        return "localhost"
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        if not re.fullmatch(r"[0-9.]+", host):
+            return None
+        try:
+            # Match socket semantics for legacy spellings such as 127.0.01.
+            address = ipaddress.ip_address(socket.inet_aton(host))
+        except OSError:
+            return None
+    mapped = getattr(address, "ipv4_mapped", None)
+    if address.is_loopback or (mapped is not None and mapped.is_loopback):
+        return str(address)
+    return None
+
+
+def normalize_server_url(server_url: str) -> str:
+    normalized = server_url.strip().rstrip("/")
+    if normalized.endswith("/v1"):
+        normalized = normalized[:-3]
+    parts = urllib.parse.urlsplit(normalized)
+    local_host = _loopback_host(parts.hostname or "")
+    if local_host is not None:
+        authority = f"[{local_host}]" if ":" in local_host else local_host
+        if parts.port is not None:
+            authority += f":{parts.port}"
+        if "@" in parts.netloc:
+            authority = parts.netloc.rsplit("@", 1)[0] + "@" + authority
+        normalized = urllib.parse.urlunsplit(parts._replace(netloc=authority))
+    return normalized
+
+
 class SGLangClient:
     def __init__(
         self,
@@ -374,10 +413,12 @@ class SGLangClient:
         retry_backoff: float,
         stop_event: threading.Event | None = None,
     ) -> None:
-        normalized = server_url.rstrip("/")
-        if normalized.endswith("/v1"):
-            normalized = normalized[:-3]
-        self.server_url = normalized
+        self.server_url = normalize_server_url(server_url)
+        host = urllib.parse.urlsplit(self.server_url).hostname or ""
+        # Environment/system proxies must never receive local inference calls.
+        # Keep this per client; remote servers retain the normal proxy policy.
+        self._direct_opener = (urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                               if _loopback_host(host) is not None else None)
         self.api_key = api_key
         self.request_timeout = request_timeout
         self.retries = retries
@@ -419,6 +460,8 @@ class SGLangClient:
                 method=method,
             )
             try:
+                if self._direct_opener is not None:
+                    return self._direct_opener.open(request, timeout=self.request_timeout)
                 return urllib.request.urlopen(request, timeout=self.request_timeout)
             except urllib.error.HTTPError as exc:
                 body = exc.read().decode("utf-8", "replace")
@@ -612,7 +655,7 @@ def run_case(
 
     if video_id:
         owner = previous.get("server_url")
-        if owner and owner != client.server_url:
+        if owner and normalize_server_url(owner) != client.server_url:
             raise BatchError(f"旧任务属于 {owner}，不能在 {client.server_url} 恢复")
         log(f"[{case.name}] 恢复 video id: {video_id}")
         try:

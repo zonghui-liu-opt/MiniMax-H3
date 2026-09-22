@@ -202,9 +202,7 @@ def prepare(args, urls, *, backend=batch):
             if not args.force and previous.get("video_id") and not batch.looks_like_mp4(paths.video):
                 # Legacy single-server state files have no owner: the original
                 # --server-url is their only safe default, never a random replica.
-                owner = previous.get("server_url") or batch.SGLangClient(
-                    server_url=args.server_url, api_key=None, request_timeout=1,
-                    retries=0, retry_backoff=1).server_url
+                owner = batch.normalize_server_url(previous.get("server_url") or args.server_url)
                 if owner not in pinned:
                     raise batch.BatchError(
                         f"{paths.state}: 未完成任务属于 {owner}；请把该地址加入 "

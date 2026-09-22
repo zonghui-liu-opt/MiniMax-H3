@@ -185,6 +185,8 @@ bash infer_ref2va_8gpu.sh --server-urls http://127.0.0.1:30010 \
   --metadata exp_Ref2VA/metadata_smoke.csv --output-dir outputs/ref2va_v1
 ```
 
+`--max-concurrency` 是每个服务的在途请求上限，默认1。设为4可以同时提交并等待4个case，但这四张GPU仍是同一个TP=2、Ulysses=2副本，不会变成四个独立副本；服务端是否同时执行、是否提高吞吐以及显存占用，需要在当前H100环境实测。
+
 连接已有服务不取决于启动脚本名称或GPU组数。旧客户端的“请先运行 `serve_ref2va_8gpu.sh`”只是通用错误提示，不代表必须启动两个副本。客户端先请求 `/models`，仅在该接口返回404时尝试 `/health`；需查看完整报错的“详情”，区分连接拒绝、超时和HTTP错误。已有服务的探测现在沿用 `--request-timeout`（默认120秒），不再被固定截为2秒；脚本自行启动服务时的循环探测仍使用最多2秒的短超时。
 
 排查时在**运行推理的同一终端/容器**执行以下只读请求：
@@ -194,7 +196,11 @@ curl --noproxy '*' -i --max-time 10 http://127.0.0.1:30010/models
 curl --noproxy '*' -i --max-time 10 http://127.0.0.1:30010/health
 ```
 
-`127.0.0.1` 指向当前机器/容器；推理与服务不在同一网络命名空间时，应使用可达的服务地址及已映射端口。若直连请求成功、Python却返回代理错误，可在推理终端设置 `export NO_PROXY="${NO_PROXY:+${NO_PROXY},}127.0.0.1,localhost"` 和 `export no_proxy="${no_proxy:+${no_proxy},}127.0.0.1,localhost"` 后重试。连接拒绝需先核对实际监听端口、进程和模型加载日志；只增大超时或跳过检查不能修复连接问题。输入dry-run不会访问服务，不能证明服务已就绪。
+`127.0.0.1` 指向当前机器/容器；推理与服务不在同一网络命名空间时，应使用可达的服务地址及已映射端口。连接拒绝需先核对实际监听端口、进程和模型加载日志；输入dry-run不会访问服务，不能证明服务已就绪。
+
+若错误正文包含 `HIS Proxy Notification`、`SWG,Proxy,NetentSec` 和HTML 504页面，响应来自企业代理，不是本机SGLang。客户端现已对 `localhost`、IPv4回环地址和 `::1` 显式直连，覆盖服务探测、任务提交、轮询、视频下载及恢复；不依赖环境中的 `NO_PROXY`，也不改动环境变量或远程地址的代理配置。`127.0.01`、`127.1` 等IPv4回环别名会规范为 `127.0.0.1`，旧state里的对应地址也按同一规则匹配，保留已有任务ID。运行命令请使用标准地址 `http://127.0.0.1:30010`。
+
+本次代理修复需一起更新 `scripts/batch_fl2va_sglang.py`、`scripts/batch_ref2va_sglang.py`、`scripts/infer_smoke_8gpu.py`。其中FL2VA命名文件是Ref2VA共用的HTTP客户端依赖，不会启动FL2VA。无需改prompt、metadata或重启Serve。只增大超时或使用 `--skip-server-check` 不能修复代理路由，因为后续POST和下载也会经过同一个HTTP客户端。
 
 以下为 `serve_ref2va_8gpu.sh` 的默认双副本配置：
 

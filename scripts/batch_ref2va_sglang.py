@@ -432,7 +432,7 @@ def run_case(case, args, client):
                 "skipped_existing": True}
     video_id = previous.get("video_id")
     if video_id:
-        if previous.get("server_url") != client.server_url:
+        if base.normalize_server_url(previous.get("server_url") or "") != client.server_url:
             raise base.BatchError("未完成任务必须返回原服务恢复")
         try:
             terminal = wait_for_result(client, case, paths, args, video_id)

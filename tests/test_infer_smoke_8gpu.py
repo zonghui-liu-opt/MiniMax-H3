@@ -212,11 +212,12 @@ class SmokeTest(unittest.TestCase):
         for mode in ("--start-servers", "--serve-only"):
             with self.subTest(mode=mode):
                 args = smoke.build_parser().parse_args([mode, "--request-timeout", "10"])
-                with mock.patch.object(smoke.batch.urllib.request, "urlopen",
+                client = smoke.make_client("http://127.0.0.1:30010", args,
+                                           threading.Event(), probe=True)
+                with mock.patch.object(client._direct_opener, "open",
                                        side_effect=TimeoutError("still loading")) as request:
                     with self.assertRaisesRegex(smoke.batch.ApiError, "still loading"):
-                        smoke.make_client("http://127.0.0.1:30010", args,
-                                          threading.Event(), probe=True).check_server()
+                        client.check_server()
                 request.assert_called_once()
                 self.assertEqual(request.call_args.kwargs["timeout"], 2)
 
@@ -308,6 +309,17 @@ class SmokeTest(unittest.TestCase):
             self.assertIn("/v1/videos/old-id", instances[1].reads)
             self.assertNotIn("/v1/videos/old-id", instances[0].reads)
             self.assertEqual(sum(len(s.submitted) for s in instances), 1)
+
+    def test_resume_normalizes_legacy_loopback_owner(self):
+        with servers() as instances:
+            argv = self.argv(instances[:1], "--limit", "1")
+            args = smoke.build_parser().parse_args(argv)
+            owner = f"http://127.0.01:{instances[0].server_port}/v1/"
+            self.seed_state(args, owner)
+            self.assertEqual(smoke.main(argv), 0)
+            self.assertIn("/v1/videos/old-id", instances[0].reads)
+            # Only the other dataset's task is new; the old ID was resumed.
+            self.assertEqual(len(instances[0].submitted), 1)
 
     def test_restart_404_resubmits_and_explicit_failed_retry(self):
         for video_id, status, extra in (("missing", "running", []),
