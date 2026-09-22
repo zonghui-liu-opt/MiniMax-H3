@@ -70,9 +70,12 @@ def build_parser():
 
 
 def make_client(url, args, stop_event, *, probe=False):
+    # Only the repeated startup loop needs a short probe. An existing service
+    # gets one check, so honor its configured HTTP timeout without retries.
+    startup_probe = probe and (args.start_servers or args.serve_only)
     return batch.SGLangClient(
         server_url=url, api_key=args.api_key,
-        request_timeout=min(args.request_timeout, 2) if probe else args.request_timeout,
+        request_timeout=min(args.request_timeout, 2) if startup_probe else args.request_timeout,
         retries=0 if probe else args.retries,
         retry_backoff=args.retry_backoff, stop_event=stop_event,
     )
@@ -409,10 +412,11 @@ def run(args, stop_event, *, backend=batch):
                     make_client(client.server_url, args, stop_event, probe=True).check_server()
                 except batch.ApiError as exc:
                     raise batch.BatchError(
-                        f"服务不可用: {client.server_url}；请先运行 bash "
-                        f"{getattr(args, 'serve_entrypoint', 'serve_smoke_8gpu.sh')} "
-                        "并等待服务就绪，或用 --server-urls 指定已有服务。"
-                        f"本次未启动模型。详情: {exc}") from exc
+                        f"服务探测失败: {client.server_url}\n详情: {exc}\n"
+                        "请确认模型加载完成，并在运行推理的同一机器/容器内检查该地址；"
+                        "127.0.0.1 指向当前机器/容器。"
+                        f"探测超时由 --request-timeout 控制（当前 {args.request_timeout:g} 秒）。"
+                        "本次只连接已有服务，不会启动或停止 SGLang；无需更换服务启动脚本。") from exc
         if args.serve_only:
             batch.log(f"全部服务就绪: {urls}；可在另一终端运行 bash "
                       f"{getattr(args, 'infer_entrypoint', 'infer_smoke_8gpu.sh')}。"

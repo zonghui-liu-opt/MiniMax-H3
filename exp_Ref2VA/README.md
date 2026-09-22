@@ -185,6 +185,17 @@ bash infer_ref2va_8gpu.sh --server-urls http://127.0.0.1:30010 \
   --metadata exp_Ref2VA/metadata_smoke.csv --output-dir outputs/ref2va_v1
 ```
 
+连接已有服务不取决于启动脚本名称或GPU组数。旧客户端的“请先运行 `serve_ref2va_8gpu.sh`”只是通用错误提示，不代表必须启动两个副本。客户端先请求 `/models`，仅在该接口返回404时尝试 `/health`；需查看完整报错的“详情”，区分连接拒绝、超时和HTTP错误。已有服务的探测现在沿用 `--request-timeout`（默认120秒），不再被固定截为2秒；脚本自行启动服务时的循环探测仍使用最多2秒的短超时。
+
+排查时在**运行推理的同一终端/容器**执行以下只读请求：
+
+```bash
+curl --noproxy '*' -i --max-time 10 http://127.0.0.1:30010/models
+curl --noproxy '*' -i --max-time 10 http://127.0.0.1:30010/health
+```
+
+`127.0.0.1` 指向当前机器/容器；推理与服务不在同一网络命名空间时，应使用可达的服务地址及已映射端口。若直连请求成功、Python却返回代理错误，可在推理终端设置 `export NO_PROXY="${NO_PROXY:+${NO_PROXY},}127.0.0.1,localhost"` 和 `export no_proxy="${no_proxy:+${no_proxy},}127.0.0.1,localhost"` 后重试。连接拒绝需先核对实际监听端口、进程和模型加载日志；只增大超时或跳过检查不能修复连接问题。输入dry-run不会访问服务，不能证明服务已就绪。
+
 以下为 `serve_ref2va_8gpu.sh` 的默认双副本配置：
 
 | 副本 | GPU | HTTP | ZMQ | master | scheduler |

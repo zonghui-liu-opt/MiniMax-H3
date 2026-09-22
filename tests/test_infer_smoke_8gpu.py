@@ -45,6 +45,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.server.reads.append(self.path)
         if self.path == "/models":
+            time.sleep(getattr(self.server, "model_delay", 0))
             self.reply({"model_path": "mock"})
         elif self.path.endswith("/content"):
             self.reply(b"\x00\x00\x00\x18ftypisom\x00\x00\x00\x00isom")
@@ -188,7 +189,36 @@ class SmokeTest(unittest.TestCase):
                                   side_effect=AssertionError("client tried to stop SGLang")), \
                 mock.patch.object(smoke.batch, "log") as log:
             self.assertEqual(smoke.main(argv), 2)
-        self.assertIn("serve_smoke_8gpu.sh", log.call_args.args[0])
+        message = log.call_args.args[0]
+        self.assertIn("服务探测失败:", message)
+        self.assertIn("详情:", message)
+        self.assertIn("请求失败:", message)
+        self.assertIn("同一机器/容器", message)
+        self.assertNotIn("请先运行 bash", message)
+
+    def test_existing_service_check_honors_request_timeout(self):
+        with servers() as instances:
+            instances[0].model_delay = 2.2
+            argv = self.argv(instances[:1], "--request-timeout", "5")
+            with mock.patch.object(smoke.subprocess, "Popen",
+                                   side_effect=AssertionError("client tried to launch SGLang")), \
+                    mock.patch.object(smoke, "run_work", return_value=0) as work:
+                self.assertEqual(smoke.main(argv), 0)
+                work.assert_called_once()
+            self.assertEqual(instances[0].reads, ["/models"])
+            self.assertEqual(instances[0].submitted, [])
+
+    def test_startup_probes_keep_short_timeout_without_retries(self):
+        for mode in ("--start-servers", "--serve-only"):
+            with self.subTest(mode=mode):
+                args = smoke.build_parser().parse_args([mode, "--request-timeout", "10"])
+                with mock.patch.object(smoke.batch.urllib.request, "urlopen",
+                                       side_effect=TimeoutError("still loading")) as request:
+                    with self.assertRaisesRegex(smoke.batch.ApiError, "still loading"):
+                        smoke.make_client("http://127.0.0.1:30010", args,
+                                          threading.Event(), probe=True).check_server()
+                request.assert_called_once()
+                self.assertEqual(request.call_args.kwargs["timeout"], 2)
 
     def test_service_survives_multiple_batches_and_stops_on_sigterm(self):
         stub = self.write_server_stub()
