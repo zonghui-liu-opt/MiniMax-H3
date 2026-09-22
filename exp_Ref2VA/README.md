@@ -172,6 +172,21 @@ python3 scripts/prepare_ref2va_metadata.py --cat-ids 00 02 38 \
 
 模型入口固定 `--model-variant ref2va`。`--model-path` 传含完整 `Ref2VA/` 分区的模型根目录，不能传 `Ref2VA` 子目录或FL2VA分区。入口保持Hub离线模式；不添加包版本、源码能力、权重或编码器的强制启动预检，不修改已跑通的环境。
 
+只在 H100 的物理 GPU `4,5,6,7` 上启动一个四卡 Ref2VA 服务时，在已有 SGLang 环境、工程根目录执行：
+
+```bash
+bash launch_minimax_h3_sglang.sh
+```
+
+该脚本通过 `CUDA_VISIBLE_DEVICES=4,5,6,7` 绑定显卡，进程内对应逻辑 `cuda:0,1,2,3`；使用模型根目录 `/srv/workspace/Kirin_AI_DataLake/models/MiniMax-H3`、TP=2、Ulysses=2、`performance-mode=speed`，监听 `0.0.0.0:30010`。原 FL2VA 启动命令已注释保留。客户端连接这一单服务时显式指定端口，例如：
+
+```bash
+bash infer_ref2va_8gpu.sh --server-urls http://127.0.0.1:30010 \
+  --metadata exp_Ref2VA/metadata_smoke.csv --output-dir outputs/ref2va_v1
+```
+
+以下为 `serve_ref2va_8gpu.sh` 的默认双副本配置：
+
 | 副本 | GPU | HTTP | ZMQ | master | scheduler |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 0,1,2,3 | 30110 | 30111 | 31110 | 32110 |
