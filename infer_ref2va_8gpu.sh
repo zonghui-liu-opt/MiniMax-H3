@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$repo_dir/scripts/media_tools_env.sh"
 exec "${PYTHON:-python3}" "$repo_dir/scripts/infer_ref2va_8gpu.py" "$@"

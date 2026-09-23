@@ -172,6 +172,18 @@ python3 scripts/prepare_ref2va_metadata.py --cat-ids 00 02 38 \
 
 模型入口固定 `--model-variant ref2va`。`--model-path` 传含完整 `Ref2VA/` 分区的模型根目录，不能传 `Ref2VA` 子目录或FL2VA分区。入口保持Hub离线模式；不添加包版本、源码能力、权重或编码器的强制启动预检，不修改已跑通的环境。
 
+如果 `ffmpeg/ffprobe` 安装在另一个环境，在**原 SGLang 环境**中显式设置 `H3_MEDIA_TOOLS_DIR`，值为包含这两个可执行文件的目录，例如 `/path/to/ffmpeg-tools/bin`。`launch_minimax_h3_sglang.sh`、`infer_ref2va_8gpu.sh`、`serve_ref2va_8gpu.sh` 共用 `scripts/media_tools_env.sh`：仅在设置该变量时创建一个只含两个媒体工具转发命令的临时目录并加入PATH，执行所选工具的绝对路径，不将另一环境的Python/SGLang或库目录加入搜索路径。默认未设置时保持原行为，不执行版本或编码能力预检，也不需要 `ss`。
+
+```bash
+# 在原 SGLang 环境、工程根目录执行；替换成实际媒体工具目录
+export H3_MEDIA_TOOLS_DIR=/path/to/ffmpeg-tools/bin
+bash launch_minimax_h3_sglang.sh
+```
+
+启动时会打印实际选用的 `ffmpeg`、`ffprobe` 路径。推理若在另一个终端执行，也在该终端设置同一变量后运行原推理命令。同步时需包含上述三个入口和 `scripts/media_tools_env.sh`。临时转发目录位于 `${TMPDIR:-/tmp}/minimax-h3-media.*`，运行期间保留供服务工作进程调用；相关服务和推理全部退出后可清理对应目录。不要将整个媒体工具环境的 `bin` 或 `lib` 加到原环境前面来替换Python或CUDA依赖。
+
+HTTP 400 `MiniMax H3 media material is invalid` 需要结合服务端底层异常判断。当前终端直接校验视频成功，只能说明当前进程能读取该文件，不证明已启动Serve继承相同的工具环境。若需将上述设置应用于已运行的Serve，先在原服务终端正常停止，再使用该变量重新启动。源视频、prompt和metadata无变化时不必重建。环境修正后，在原推理命令中选择失败猫并使用 `--cat-ids 34 --max-concurrency 1 --retry-failed` 做一条验证，保留原 `--output-dir`、metadata、分辨率及其他采样参数，不加全局 `--force`；成功后去掉猫ID筛选继续补跑，已完成结果保持复用。
+
 只在 H100 的物理 GPU `4,5,6,7` 上启动一个四卡 Ref2VA 服务时，在已有 SGLang 环境、工程根目录执行：
 
 ```bash

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$repo_dir/scripts/media_tools_env.sh"
 
 # FL2VA (disabled; retained for reference).
 # Auto uses folding for the single-request recipes below and can
